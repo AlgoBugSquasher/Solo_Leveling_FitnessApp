@@ -1,0 +1,8 @@
+com.example.myapplication.app-pngs-0 D:\MY_APPLICATION\app\build\generated\res\pngs\debug
+com.example.myapplication.app-updated_navigation_xml-1 D:\MY_APPLICATION\app\build\generated\updated_navigation_xml\debug
+com.example.myapplication.app-packageDebugResources-2 D:\MY_APPLICATION\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.myapplication.app-packageDebugResources-3 D:\MY_APPLICATION\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.myapplication.app-debug-4 D:\MY_APPLICATION\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.example.myapplication.app-debug-5 D:\MY_APPLICATION\app\src\debug\res
+com.example.myapplication.app-main-6 D:\MY_APPLICATION\app\src\main\res
+gradleHome-0 C:\Users\omkri\.gradle

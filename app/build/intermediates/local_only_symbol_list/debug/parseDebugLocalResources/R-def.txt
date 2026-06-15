@@ -1,0 +1,32 @@
+R_DEF: Internal format may change without notice
+local
+color black
+color purple_200
+color purple_500
+color purple_700
+color teal_200
+color teal_700
+color white
+drawable abyss_walker
+drawable assianite
+drawable beast_crusher
+drawable chaos_executioner
+drawable eclipse_sovereign
+drawable elite_hunter
+drawable ic_launcher_background
+drawable ic_launcher_foreground
+drawable initiate_hunter
+drawable iron_body
+drawable monarch_candidate
+drawable night_sentinel
+drawable phantom_warrior
+drawable shadow_monarch
+drawable shadow_trainee
+drawable silent_killer
+drawable void_reaper
+mipmap ic_launcher
+mipmap ic_launcher_round
+string app_name
+style Theme.MyApplication
+xml backup_rules
+xml data_extraction_rules
