@@ -41,6 +41,66 @@ import com.example.myapplication.model.Badge
 import com.example.myapplication.model.BadgeRarity
 import com.example.myapplication.viewmodel.BadgeViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.util.SoundManager
+import com.example.myapplication.R
+
+@Preview
+@Composable
+fun UnlockedBadgeCardPreview() {
+    Box(modifier = Modifier.padding(16.dp).width(200.dp)) {
+        UnlockedBadgeCard(
+            badge = Badge(
+                name = "Shadow Monarch",
+                requiredLevel = 50,
+                rarity = BadgeRarity.LEGENDARY,
+                description = "The shadows bow to their new king.",
+                imageRes = R.drawable.shadow_monarch,
+                isUnlocked = true
+            ),
+            onClick = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+fun LockedBadgeCardPreview() {
+    Box(modifier = Modifier.padding(16.dp).width(200.dp)) {
+        LockedBadgeCard(
+            badge = Badge(
+                name = "???",
+                requiredLevel = 100,
+                rarity = BadgeRarity.LEGENDARY,
+                description = "Locked description.",
+                imageRes = R.drawable.silent_killer,
+                isUnlocked = false
+            )
+        )
+    }
+}
+
+@Preview
+@Composable
+fun BadgeShowcasePreview() {
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager.getInstance(context) }
+    Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray)) {
+        BadgeShowcaseContent(
+            badge = Badge(
+                name = "Shadow Monarch",
+                requiredLevel = 50,
+                rarity = BadgeRarity.LEGENDARY,
+                description = "The shadows bow to their new king. Long live the monarch of the eternal night.",
+                imageRes = R.drawable.shadow_monarch,
+                isUnlocked = true
+            ),
+            soundManager = soundManager,
+            onDismiss = {}
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,9 +112,13 @@ fun HunterArchiveScreen(
     var unlockedBadgePopup by remember { mutableStateOf<Badge?>(null) }
     var selectedShowcaseBadge by remember { mutableStateOf<Badge?>(null) }
 
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager.getInstance(context) }
+
     LaunchedEffect(Unit) {
         viewModel.newBadgeUnlocked.collect { badge ->
             unlockedBadgePopup = badge
+            soundManager.playBadgeUnlock(badge.rarity)
             delay(4000)
             unlockedBadgePopup = null
         }
@@ -67,7 +131,11 @@ fun HunterArchiveScreen(
     if (selectedShowcaseBadge != null) {
         BadgeShowcaseDialog(
             badge = selectedShowcaseBadge!!,
-            onDismiss = { selectedShowcaseBadge = null }
+            soundManager = soundManager,
+            onDismiss = { 
+                soundManager.playClick()
+                selectedShowcaseBadge = null 
+            }
         )
     }
 
@@ -76,7 +144,10 @@ fun HunterArchiveScreen(
             TopAppBar(
                 title = { Text("Hunter Archive", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        soundManager.playClick()
+                        onNavigateBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
@@ -102,6 +173,7 @@ fun HunterArchiveScreen(
                         badge = badge,
                         onClick = {
                             if (badge.isUnlocked) {
+                                soundManager.playClick()
                                 selectedShowcaseBadge = badge
                             }
                         }
@@ -126,150 +198,122 @@ fun HunterArchiveScreen(
 
 @Composable
 fun BadgeCard(badge: Badge, onClick: () -> Unit) {
-    val rarityColor = badge.rarity.color
-    val isUnlocked = badge.isUnlocked
+    if (badge.isUnlocked) {
+        UnlockedBadgeCard(badge = badge, onClick = onClick)
+    } else {
+        LockedBadgeCard(badge = badge)
+    }
+}
 
+@Composable
+fun UnlockedBadgeCard(badge: Badge, onClick: () -> Unit) {
+    val rarityColor = badge.rarity.color
     val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.8f,
+        initialValue = 0.5f,
+        targetValue = 0.9f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glowAlpha"
     )
-    
-    val auraScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "auraScale"
+
+    val cardBackground = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFF2D1B4E),
+            Color(0xFF1A0B2E)
+        )
     )
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.7f)
-            .clickable(enabled = isUnlocked) { onClick() }
-            .then(
-                if (isUnlocked) {
-                    Modifier.border(
-                        1.dp,
-                        rarityColor.copy(alpha = glowAlpha),
-                        RoundedCornerShape(16.dp)
-                    )
-                } else {
-                    Modifier.border(
-                        1.dp,
-                        Color.White.copy(alpha = 0.1f),
-                        RoundedCornerShape(16.dp)
-                    )
-                }
+            .aspectRatio(0.6f)
+            .clickable { onClick() }
+            .border(
+                width = 1.5.dp,
+                brush = Brush.verticalGradient(
+                    listOf(rarityColor, rarityColor.copy(alpha = 0.3f))
+                ),
+                shape = RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isUnlocked) Color(0xFF1E1B24).copy(alpha = 0.9f) else Color(0xFF121212).copy(alpha = 0.6f)
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .background(cardBackground)
         ) {
+            // Rarity Glow behind image
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1.5f),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isUnlocked) {
-                    // Subtle Rarity Aura
-                    BadgeAura(
-                        rarity = badge.rarity,
-                        pulseScale = auraScale,
-                        alphaMult = glowAlpha * 0.5f,
-                        modifier = Modifier.fillMaxSize(0.9f)
+                    .fillMaxHeight(0.7f)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                rarityColor.copy(alpha = 0.25f * glowAlpha),
+                                Color.Transparent
+                            )
+                        )
                     )
+            )
 
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Badge Artwork (65-75% of card)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.7f)
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Image(
                         painter = painterResource(id = badge.imageRes),
                         contentDescription = badge.name,
-                        modifier = Modifier.fillMaxSize(0.85f),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Fit
                     )
-                } else {
-                    // Mysterious Locked View
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .background(Color.White.copy(alpha = 0.05f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(id = badge.imageRes),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize(0.7f)
-                                .alpha(0.1f),
-                            contentScale = ContentScale.Fit,
-                            colorFilter = ColorFilter.tint(Color.Black, androidx.compose.ui.graphics.BlendMode.SrcAtop)
-                        )
-                        
-                        Icon(
-                            Icons.Default.Lock,
-                            contentDescription = "Locked",
-                            tint = Color.White.copy(alpha = 0.7f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
                 }
-            }
 
-            // Text Info Area
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp)
-            ) {
-                Text(
-                    text = if (isUnlocked) badge.name.uppercase() else "???",
-                    color = if (isUnlocked) Color.White else Color.White.copy(alpha = 0.3f),
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        textAlign = TextAlign.Center
-                    ),
-                    maxLines = 1
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
+                // Text Layout
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.3f)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = badge.name.uppercase(),
+                        color = Color.White,
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center,
+                            letterSpacing = 0.5.sp,
+                            shadow = Shadow(Color.Black, blurRadius = 4f)
+                        ),
+                        maxLines = 2
+                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                if (isUnlocked) {
                     Text(
                         text = badge.rarity.displayName.uppercase(),
                         color = rarityColor,
                         style = TextStyle(
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 2.sp
-                        )
-                    )
-                } else {
-                    Text(
-                        text = "LVL ${badge.requiredLevel}",
-                        color = Color.White.copy(alpha = 0.4f),
-                        style = TextStyle(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
                         )
                     )
                 }
@@ -278,34 +322,54 @@ fun BadgeCard(badge: Badge, onClick: () -> Unit) {
     }
 }
 
-
 @Composable
-fun BadgeAura(
-    rarity: BadgeRarity,
-    modifier: Modifier = Modifier,
-    pulseScale: Float = 1f,
-    alphaMult: Float = 1f
-) {
-    val auraColors = when (rarity) {
-        BadgeRarity.COMMON -> listOf(Color.Gray.copy(alpha = 0.3f), Color.Transparent)
-        BadgeRarity.RARE -> listOf(Color(0xFF6200EE).copy(alpha = 0.4f * alphaMult), Color.Transparent)
-        BadgeRarity.EPIC -> listOf(Color(0xFFBB86FC).copy(alpha = 0.6f * alphaMult), Color(0xFFD0BCFF).copy(alpha = 0.2f), Color.Transparent)
-        BadgeRarity.LEGENDARY -> listOf(Color(0xFFFFD700).copy(alpha = 0.7f * alphaMult), Color(0xFFBB86FC).copy(alpha = 0.4f), Color.Transparent)
-    }
-
-    Box(
-        modifier = modifier
-            .size(120.dp)
-            .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
-            .background(
-                Brush.radialGradient(auraColors),
-                CircleShape
+fun LockedBadgeCard(badge: Badge) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.75f) // Smaller than unlocked
+            .alpha(0.6f),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = "Locked",
+                tint = Color.White.copy(alpha = 0.3f),
+                modifier = Modifier.size(32.dp)
             )
-    )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "???",
+                color = Color.White.copy(alpha = 0.3f),
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = "LVL ${badge.requiredLevel}",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
 }
 
+
 @Composable
-fun BadgeShowcaseDialog(badge: Badge, onDismiss: () -> Unit) {
+fun BadgeShowcaseDialog(badge: Badge, soundManager: SoundManager, onDismiss: () -> Unit) {
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -313,147 +377,177 @@ fun BadgeShowcaseDialog(badge: Badge, onDismiss: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.9f))
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.4f))
+                .blur(16.dp)
+                .clickable { onDismiss() }
+        )
+        
+        Box(
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            BadgeShowcaseAnimation(badge = badge, onDismiss = onDismiss)
+            BadgeShowcaseAnimation(badge = badge, soundManager = soundManager, onDismiss = onDismiss)
         }
     }
 }
 
 @Composable
-fun BadgeShowcaseAnimation(badge: Badge, onDismiss: () -> Unit) {
+fun BadgeShowcaseAnimation(badge: Badge, soundManager: SoundManager, onDismiss: () -> Unit) {
     var isVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { isVisible = true }
-
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val glowScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = ""
-    )
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = ""
-    )
+    LaunchedEffect(Unit) { 
+        isVisible = true
+        // soundManager.playBadgeUnlock(badge.rarity) // Optional: play sound when opening showcase
+    }
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(tween(600)) + scaleIn(tween(600, easing = LinearOutSlowInEasing), initialScale = 0.4f)
+        enter = fadeIn(tween(500)) + scaleIn(tween(500, easing = LinearOutSlowInEasing), initialScale = 0.7f),
+        exit = fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.9f)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        BadgeShowcaseContent(badge = badge, soundManager = soundManager, onDismiss = onDismiss)
+    }
+}
+
+@Composable
+fun BadgeShowcaseContent(badge: Badge, soundManager: SoundManager, onDismiss: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val glowScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "glowScale"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "glowAlpha"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .clickable(enabled = false) { }
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+
+        Box(
             modifier = Modifier
-                .padding(24.dp)
-                .clickable(enabled = false) { } // Prevent dismiss when clicking content
+                .fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(32.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF2D1B4E), Color(0xFF120820))
+                    )
+                )
+                .border(
+                    2.dp,
+                    Brush.verticalGradient(
+                        listOf(badge.rarity.color, Color.Transparent)
+                    ),
+                    RoundedCornerShape(32.dp)
+                )
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF1E1B24).copy(alpha = 0.95f))
-                    .border(1.dp, badge.rarity.color.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                    .padding(vertical = 48.dp, horizontal = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(360.dp)) {
-                        // Radiant Aura
-                        BadgeAura(
-                            rarity = badge.rarity,
-                            pulseScale = glowScale,
-                            alphaMult = glowAlpha,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        
-                        Image(
-                            painter = painterResource(id = badge.imageRes),
-                            contentDescription = badge.name,
-                            modifier = Modifier.size(280.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Text(
-                        text = badge.name.uppercase(),
-                        color = Color.White,
-                        style = TextStyle(
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center,
-                            letterSpacing = 2.sp
-                        )
-                    )
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    Surface(
-                        color = badge.rarity.color.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, badge.rarity.color.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = badge.rarity.displayName.uppercase(),
-                            color = badge.rarity.color,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 3.sp
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(320.dp)) {
+                    // Radiant Rarity Glow
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(scaleX = glowScale, scaleY = glowScale)
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        badge.rarity.color.copy(alpha = glowAlpha),
+                                        Color.Transparent
+                                    )
+                                ),
+                                CircleShape
                             )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = badge.description,
-                        color = Color.LightGray,
+                    )
+                    
+                    Image(
+                        painter = painterResource(id = badge.imageRes),
+                        contentDescription = badge.name,
+                        modifier = Modifier.size(260.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Text(
+                    text = badge.name.uppercase(),
+                    color = Color.White,
+                    style = TextStyle(
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black,
                         textAlign = TextAlign.Center,
-                        fontSize = 16.sp,
-                        modifier = Modifier.fillMaxWidth(0.9f)
+                        letterSpacing = 1.sp,
+                        shadow = Shadow(Color.Black, blurRadius = 8f)
                     )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "REQUIRED LEVEL: ${badge.requiredLevel}",
-                        color = Color.White.copy(alpha = 0.4f),
-                        style = TextStyle(
-                            fontSize = 12.sp, 
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = badge.rarity.displayName.uppercase(),
+                    color = badge.rarity.color,
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 4.sp
                     )
-                    
-                    Spacer(modifier = Modifier.height(48.dp))
-                    
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.width(200.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("CLOSE", color = Color.White, fontWeight = FontWeight.ExtraBold)
-                        }
-                    }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = badge.description,
+                    color = Color.LightGray.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Center,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.fillMaxWidth(0.85f)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "REQUIRED LEVEL: ${badge.requiredLevel}",
+                    color = Color.White.copy(alpha = 0.5f),
+                    style = TextStyle(
+                        fontSize = 12.sp, 
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                IconButton(
+                    onClick = {
+                        soundManager.playClick()
+                        onDismiss()
+                    },
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                 }
             }
         }
+        
+        Spacer(modifier = Modifier.weight(1.2f))
     }
 }
 

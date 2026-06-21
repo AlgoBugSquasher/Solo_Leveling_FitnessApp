@@ -26,6 +26,14 @@ drawable silent_killer
 drawable void_reaper
 mipmap ic_launcher
 mipmap ic_launcher_round
+raw badge_common
+raw badge_epic
+raw badge_legendary
+raw badge_rare
+raw click_subtle
+raw level_up
+raw quest_complete
+raw rank_promotion
 string app_name
 style Theme.MyApplication
 xml backup_rules

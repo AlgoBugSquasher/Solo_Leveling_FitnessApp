@@ -6,6 +6,7 @@ import com.example.myapplication.data.FitnessRepository
 import com.example.myapplication.model.Exercise
 import com.example.myapplication.model.ExerciseEntity
 import com.example.myapplication.model.WorkoutEntity
+import com.example.myapplication.util.RankCalculator
 import com.example.myapplication.util.XpCalculator
 import java.util.Calendar
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -71,11 +72,31 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
                 leveledUp = true
             }
 
-            val newRank = when {
-                newLevel >= 20 -> "Advanced"
-                newLevel >= 10 -> "Intermediate"
-                else -> "Beginner"
-            }
+            val newRank = RankCalculator.calculateRank(newLevel)
+            val isRankPromotion = RankCalculator.isPromotion(currentUser.rank, newRank)
+
+            // 5. Personal Records Check
+            val newPrs = mutableListOf<WorkoutEvent.NewPersonalRecord>()
+            
+            val finalMaxPushups = if (addedPushups > currentUser.maxPushupsSingleWorkout) {
+                newPrs.add(WorkoutEvent.NewPersonalRecord("Highest Pushups", currentUser.maxPushupsSingleWorkout, addedPushups))
+                addedPushups
+            } else currentUser.maxPushupsSingleWorkout
+
+            val finalMaxPullups = if (addedPullups > currentUser.maxPullupsSingleWorkout) {
+                newPrs.add(WorkoutEvent.NewPersonalRecord("Highest Pullups", currentUser.maxPullupsSingleWorkout, addedPullups))
+                addedPullups
+            } else currentUser.maxPullupsSingleWorkout
+
+            val finalMaxPlank = if (addedPlankTime > currentUser.maxPlankSingleWorkout) {
+                newPrs.add(WorkoutEvent.NewPersonalRecord("Longest Plank", currentUser.maxPlankSingleWorkout, addedPlankTime))
+                addedPlankTime
+            } else currentUser.maxPlankSingleWorkout
+
+            val finalMaxXp = if (xpGained > currentUser.maxXpSingleWorkout) {
+                newPrs.add(WorkoutEvent.NewPersonalRecord("Highest Workout XP", currentUser.maxXpSingleWorkout, xpGained))
+                xpGained
+            } else currentUser.maxXpSingleWorkout
 
             val updatedUser = currentUser.copy(
                 xp = newXp,
@@ -88,10 +109,16 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
                 totalXpEarned = currentUser.totalXpEarned + xpGained,
                 totalWorkouts = currentUser.totalWorkouts + 1,
                 highestStreak = maxOf(currentUser.highestStreak, newStreak),
-                lastWorkoutDate = System.currentTimeMillis()
+                lastWorkoutDate = System.currentTimeMillis(),
+                maxPushupsSingleWorkout = finalMaxPushups,
+                maxPullupsSingleWorkout = finalMaxPullups,
+                maxPlankSingleWorkout = finalMaxPlank,
+                maxXpSingleWorkout = finalMaxXp,
+                totalPromotions = if (isRankPromotion) currentUser.totalPromotions + 1 else currentUser.totalPromotions,
+                highestRank = RankCalculator.getHighestRank(currentUser.highestRank, newRank)
             )
 
-            // 5. Save Workout to DB
+            // 6. Save Workout to DB
             val workoutEntity = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = xpGained)
             val exerciseEntities = workoutExercises.map { 
                 ExerciseEntity(
@@ -104,17 +131,11 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             }
             repository.insertWorkout(workoutEntity, exerciseEntities)
 
-            // 6. Update User
+            // 7. Update User
             repository.updateUser(updatedUser)
             
-            // 7. Check Title Unlocks
+            // 8. Check Title Unlocks
             val newlyUnlockedTitles = repository.checkAndUnlockTitles(newStreak)
-            newlyUnlockedTitles.forEach { title ->
-                // HomeViewModel usually handles UI events, but WorkoutViewModel can emit some or Home can observe user/titles.
-                // For simplicity, let's have WorkoutViewModel emit a new event type if needed, 
-                // OR better: HomeScreen collects uiEvent from HomeViewModel. 
-                // Let's add a mechanism to notify about title unlocks.
-            }
 
             // Check Abilities
             repository.checkAndUnlockAbilities(updatedUser)
@@ -123,6 +144,9 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             if (leveledUp) {
                 _eventFlow.emit(WorkoutEvent.LevelUp(newLevel))
             }
+            
+            // Emit PR events
+            newPrs.forEach { _eventFlow.emit(it) }
             
             // Reset exercises
             _exercises.value = emptyList()
@@ -157,5 +181,6 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
     sealed class WorkoutEvent {
         data class WorkoutCompleted(val xpGained: Int) : WorkoutEvent()
         data class LevelUp(val newLevel: Int) : WorkoutEvent()
+        data class NewPersonalRecord(val recordName: String, val oldValue: Int, val newValue: Int) : WorkoutEvent()
     }
 }

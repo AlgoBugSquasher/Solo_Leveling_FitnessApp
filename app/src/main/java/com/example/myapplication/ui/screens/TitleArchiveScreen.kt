@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.util.SoundManager
 import com.example.myapplication.model.Title
 import com.example.myapplication.viewmodel.TitleViewModel
 
@@ -31,6 +33,9 @@ fun TitleArchiveScreen(
     val titles by viewModel.titles.collectAsState()
     val user by viewModel.user.collectAsState()
 
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager.getInstance(context) }
+
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(Color(0xFF1A0B2E), Color(0xFF0F051D))
     )
@@ -40,7 +45,10 @@ fun TitleArchiveScreen(
             TopAppBar(
                 title = { Text("Hunter Titles", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        soundManager.playClick()
+                        onNavigateBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
@@ -63,7 +71,10 @@ fun TitleArchiveScreen(
                     TitleItem(
                         title = title,
                         isActive = user?.activeTitle == title.name,
-                        onEquip = { viewModel.equipTitle(title.name) }
+                        onEquip = { 
+                            soundManager.playClick()
+                            viewModel.equipTitle(title.name) 
+                        }
                     )
                 }
             }

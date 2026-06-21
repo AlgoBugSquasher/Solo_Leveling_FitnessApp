@@ -2,7 +2,9 @@ package com.example.myapplication.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,58 +12,57 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.myapplication.model.Exercise
+import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.WorkoutViewModel
+import com.example.myapplication.viewmodel.TrainingPlanViewModel
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
+fun WorkoutScreen(
+    viewModel: WorkoutViewModel, 
+    trainingViewModel: TrainingPlanViewModel,
+    onNavigateBack: () -> Unit
+) {
     val exercises by viewModel.exercises.collectAsState()
-    
-    val predefinedExercises = listOf(
-        "Push-up", "Pull-up", "Chin-up", "Dips", "Pike Push-up",
-        "Handstand Push-up", "Muscle-Up", "Plank", "L-sit", 
-        "Front Lever Hold", "Planche Hold", "Hanging",
-        "Front lever raises", "Planche lean"
-    )
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager.getInstance(context) }
 
     var selectedExercise by remember { mutableStateOf("") }
     var reps by remember { mutableStateOf("") }
     var sets by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
 
-    // High-quality auto-suggestion state
-    var searchQuery by remember { mutableStateOf("") }
+    val exercisesList = listOf(
+        "Push-up", "Diamond Push-up", "Wide Push-up", "Archer Push-up", "Pike Push-up", "Pseudo Planche Push-up",
+        "Pull-up", "Chin-up", "Explosive Pull-up", "Muscle-up", "Wide Pull-up",
+        "Plank", "Side Plank", "L-sit", "Hanging Leg Raise", "Front Lever Hold", "Planche Lean"
+    )
+
     val filteredExercises = remember { mutableStateListOf<String>() }
 
-    // Debounce logic for smooth typing - Optimized
     LaunchedEffect(searchQuery) {
-        if (searchQuery.isBlank()) {
-            filteredExercises.clear()
-            expanded = false
-            return@LaunchedEffect
-        }
-        
-        // 300ms debounce
-        delay(300)
-        
-        // Filter and limit to 6 results for performance
-        val filtered = predefinedExercises
+        val filtered = exercisesList
             .filter { it.contains(searchQuery, ignoreCase = true) }
             .take(6)
         
@@ -79,6 +80,12 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
             when (event) {
                 is WorkoutViewModel.WorkoutEvent.WorkoutCompleted -> {
                     showXpGained = event.xpGained
+                    // Track training plan progress
+                    trainingViewModel.trackDailyProgress(
+                        addedPushups = exercises.filter { it.name.contains("Push-up", ignoreCase = true) }.sumOf { (it.reps ?: 0) * it.sets },
+                        addedPullups = exercises.filter { it.name.contains("Pull-up", ignoreCase = true) || it.name.contains("Chin-up", ignoreCase = true) }.sumOf { (it.reps ?: 0) * it.sets },
+                        addedPlankSeconds = exercises.filter { it.name.contains("Plank", ignoreCase = true) }.sumOf { (it.duration ?: 0) * it.sets }
+                    )
                     delay(2500)
                     showXpGained = null
                     onNavigateBack() // Auto-return to home to see level-up/badges
@@ -87,6 +94,9 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
                     // Level Up is also handled by HomeScreen via User repository updates, 
                     // but we can show a simple indicator here if needed.
                     // For now, let Home handle the big animations.
+                }
+                is WorkoutViewModel.WorkoutEvent.NewPersonalRecord -> {
+                    // Handled by HomeViewModel when user returns to HomeScreen
                 }
             }
         }
@@ -98,7 +108,10 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Log Workout", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        soundManager.playClick()
+                        onNavigateBack()
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
@@ -113,7 +126,8 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(16.dp)
+                ,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Input Card
@@ -138,43 +152,31 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
 
                         Text("Search or Custom", color = Color(0xFFBB86FC), fontWeight = FontWeight.Bold)
 
-                        // High-Quality Auto-suggestion (Searchable / Auto-complete)
-                        ExposedDropdownMenuBox(
-                            expanded = expanded,
-                            onExpandedChange = { /* Controlled by searchQuery logic */ }
-                        ) {
+                        Box {
                             OutlinedTextField(
                                 value = searchQuery,
-                                onValueChange = {
-                                    searchQuery = it
-                                    selectedExercise = it // Keep actual value in sync
-                                },
-                                label = { Text("Search or add exercise") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                singleLine = true,
+                                onValueChange = { searchQuery = it },
+                                label = { Text("Exercise Name") },
+                                modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFFBB86FC),
-                                    unfocusedBorderColor = Color.Gray,
-                                    focusedLabelColor = Color(0xFFBB86FC),
-                                    unfocusedLabelColor = Color.Gray,
+                                    unfocusedTextColor = Color.White,
                                     focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    unfocusedBorderColor = Color.Gray,
+                                    focusedBorderColor = Color(0xFFBB86FC)
                                 )
                             )
                             
-                            ExposedDropdownMenu(
-                                expanded = expanded,
+                            DropdownMenu(
+                                expanded = expanded && searchQuery.isNotEmpty(),
                                 onDismissRequest = { expanded = false },
-                                modifier = Modifier.background(Color(0xFF1F1B24))
+                                modifier = Modifier.fillMaxWidth(0.9f).background(Color(0xFF2D2D2D))
                             ) {
-                                // Show filtered suggestions
-                                filteredExercises.forEach { type ->
+                                filteredExercises.forEach { exercise ->
                                     DropdownMenuItem(
-                                        text = { Text(type, color = Color.White) },
+                                        text = { Text(exercise, color = Color.White) },
                                         onClick = {
-                                            searchQuery = type
-                                            selectedExercise = type
+                                            selectedExercise = exercise
+                                            searchQuery = exercise
                                             expanded = false
                                         }
                                     )
@@ -182,59 +184,50 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
                             }
                         }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Check if it's duration based
-                            val isDurationBased = selectedExercise.contains("Plank", ignoreCase = true) ||
-                                    selectedExercise.contains("L-sit", ignoreCase = true) ||
-                                    selectedExercise.contains("Hanging", ignoreCase = true) ||
-                                    selectedExercise.contains("Planche lean", ignoreCase = true) ||
-                                    selectedExercise.contains("Front Lever", ignoreCase = true) ||
-                                    selectedExercise.contains("Planche Hold", ignoreCase = true)
-
-                            if (!isDurationBased) {
-                                OutlinedTextField(
-                                    value = reps,
-                                    onValueChange = { reps = it },
-                                    label = { Text("Reps") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
-                                    )
-                                )
-                            } else {
-                                OutlinedTextField(
-                                    value = duration,
-                                    onValueChange = { duration = it },
-                                    label = { Text("Seconds") },
-                                    modifier = Modifier.weight(1f),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White
-                                    )
-                                )
-                            }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = sets,
-                                onValueChange = { sets = it },
+                                onValueChange = { sets = it.filter { c -> c.isDigit() } },
                                 label = { Text("Sets") },
                                 modifier = Modifier.weight(1f),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                )
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White, focusedTextColor = Color.White)
                             )
+                            
+                            val isPlank = selectedExercise.contains("Plank", ignoreCase = true) || 
+                                         selectedExercise.contains("L-sit", ignoreCase = true) ||
+                                         selectedExercise.contains("Hold", ignoreCase = true) ||
+                                         selectedExercise.contains("Lean", ignoreCase = true) ||
+                                         selectedExercise.contains("Lever", ignoreCase = true)
+
+                            if (isPlank) {
+                                OutlinedTextField(
+                                    value = duration,
+                                    onValueChange = { duration = it.filter { c -> c.isDigit() } },
+                                    label = { Text("Sec") },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White, focusedTextColor = Color.White)
+                                )
+                            } else {
+                                OutlinedTextField(
+                                    value = reps,
+                                    onValueChange = { reps = it.filter { c -> c.isDigit() } },
+                                    label = { Text("Reps") },
+                                    modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    colors = OutlinedTextFieldDefaults.colors(unfocusedTextColor = Color.White, focusedTextColor = Color.White)
+                                )
+                            }
                         }
 
                         Button(
                             onClick = {
-                                val r = reps.toIntOrNull()
-                                val s = sets.toIntOrNull() ?: 0
-                                val d = duration.toIntOrNull()
-                                
+                                if (selectedExercise.isEmpty()) return@Button
+                                val s = sets.toIntOrNull() ?: 1
+                                val r = reps.toIntOrNull() ?: 0
+                                val d = duration.toIntOrNull() ?: 0
+
                                 // Logic: if it's duration based, pass reps as null and duration as d.
                                 // Else pass reps as r and duration as null.
                                 val isDurationBased = selectedExercise.contains("Plank", ignoreCase = true) ||
@@ -278,7 +271,10 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
                 }
 
                 Button(
-                    onClick = { viewModel.completeWorkout() },
+                    onClick = { 
+                        soundManager.playClick()
+                        viewModel.completeWorkout() 
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF03DAC6)),
                     shape = RoundedCornerShape(12.dp),
@@ -303,47 +299,41 @@ fun WorkoutScreen(viewModel: WorkoutViewModel, onNavigateBack: () -> Unit) {
                     Text(
                         "+$showXpGained XP",
                         color = Color.Black,
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(24.dp)
+                        modifier = Modifier.padding(24.dp),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black
                     )
                 }
             }
-        }
-    }
-
-    if (showLevelUp != null) {
-        LevelUpDialog(level = showLevelUp!!) {
-            showLevelUp = null
         }
     }
 }
 
 @Composable
 fun LevelUpDialog(level: Int, onDismiss: () -> Unit) {
-    var isVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { isVisible = true }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(onClick = onDismiss) {
-                Text("Great!")
-            }
-        },
-        title = {
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = scaleIn(animationSpec = spring(dampingRatio = Spring.DampingRatioHighBouncy)) + fadeIn()
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F1B24)),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(2.dp, Color(0xFFBB86FC))
+        ) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Level Up!", color = Color(0xFFBB86FC), fontWeight = FontWeight.ExtraBold, fontSize = 28.sp)
+                Text("LEVEL UP!", color = Color(0xFFBB86FC), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Reached Level $level", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
+                ) {
+                    Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
             }
-        },
-        text = {
-            Text("You reached level $level!", fontSize = 18.sp)
-        },
-        containerColor = Color(0xFF1E1E1E)
-    )
+        }
+    }
 }
 
 @Composable
@@ -355,27 +345,27 @@ fun AnimatedButton(
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "ButtonScale"
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = ""
     )
 
     Box(
         modifier = modifier
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        try {
-                            awaitRelease()
-                        } finally {
-                            isPressed = false
-                        }
-                    },
-                    onTap = { onClick() }
-                )
+                if (enabled) {
+                    detectTapGestures(
+                        onPress = {
+                            isPressed = true
+                            try {
+                                awaitRelease()
+                            } finally {
+                                isPressed = false
+                            }
+                        },
+                        onTap = { onClick() }
+                    )
+                }
             },
         contentAlignment = Alignment.Center
     ) {
@@ -384,49 +374,41 @@ fun AnimatedButton(
 }
 
 @Composable
-fun QuickAddButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
+fun QuickAddButton(text: String, modifier: Modifier, onClick: () -> Unit) {
+    Button(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
-        color = Color(0xFF2D1B4E).copy(alpha = 0.5f),
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2D1B4E)),
         shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f))
+        contentPadding = PaddingValues(4.dp)
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        }
+        Text(text, fontSize = 12.sp, color = Color.White)
     }
 }
 
 @Composable
 fun ExerciseItem(exercise: Exercise, onRemove: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2D2D)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text(exercise.name, fontWeight = FontWeight.Bold, color = Color.Black)
-                val detailText = when {
-                    exercise.duration != null && (exercise.reps == null || exercise.reps == 0) -> 
-                        "${exercise.duration} sec x ${exercise.sets} sets"
-                    exercise.reps != null -> 
-                        "${exercise.reps} reps x ${exercise.sets} sets"
-                    else -> 
-                        "${exercise.sets} sets"
-                }
-                Text(detailText, color = Color(0xFF2E7D32)) // A nice green color
+            Column(modifier = Modifier.weight(1f)) {
+                Text(exercise.name, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    if (exercise.reps != null) "${exercise.sets} sets × ${exercise.reps} reps"
+                    else "${exercise.sets} sets × ${exercise.duration} sec",
+                    color = Color(0xFF03DAC6),
+                    fontSize = 14.sp
+                )
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove")
+                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Red.copy(alpha = 0.7f))
             }
         }
     }

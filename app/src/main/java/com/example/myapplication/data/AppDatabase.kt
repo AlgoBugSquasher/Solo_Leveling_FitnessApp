@@ -4,18 +4,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.myapplication.model.Ability
-import com.example.myapplication.model.Title
-import com.example.myapplication.model.ExerciseEntity
-import com.example.myapplication.model.User
-import com.example.myapplication.model.WorkoutEntity
+import com.example.myapplication.model.*
 
-@Database(entities = [User::class, WorkoutEntity::class, ExerciseEntity::class, Ability::class, Title::class], version = 9, exportSchema = false)
+@Database(entities = [User::class, WorkoutEntity::class, ExerciseEntity::class, Ability::class, Title::class, TrainingDay::class, WeeklyBonusEntity::class], version = 13, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun abilityDao(): AbilityDao
     abstract fun workoutDao(): WorkoutDao
     abstract fun titleDao(): TitleDao
+    abstract fun trainingPlanDao(): TrainingPlanDao
 
     companion object {
         @Volatile

@@ -276,6 +276,14 @@ int layout notification_template_part_chronometer 0x7f070007
 int layout notification_template_part_time 0x7f070008
 int mipmap ic_launcher 0x7f080000
 int mipmap ic_launcher_round 0x7f080001
+int raw badge_common 0x7f0d0000
+int raw badge_epic 0x7f0d0001
+int raw badge_legendary 0x7f0d0002
+int raw badge_rare 0x7f0d0003
+int raw click_subtle 0x7f0d0004
+int raw level_up 0x7f0d0005
+int raw quest_complete 0x7f0d0006
+int raw rank_promotion 0x7f0d0007
 int string androidx_compose_foundation_autofill 0x7f090000
 int string androidx_compose_ui_autofill 0x7f090001
 int string androidx_startup 0x7f090002

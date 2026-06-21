@@ -22,10 +22,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.util.SoundManager
 import com.example.myapplication.model.Badge
 import com.example.myapplication.model.User
 import com.example.myapplication.viewmodel.StatisticsViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +39,9 @@ fun StatisticsScreen(
     val highestBadge by viewModel.highestBadge.collectAsState()
     val totalBadges = viewModel.totalBadges
 
+    val context = LocalContext.current
+    val soundManager = remember { SoundManager.getInstance(context) }
+
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
     )
@@ -47,7 +51,10 @@ fun StatisticsScreen(
             TopAppBar(
                 title = { Text("Hunter Stats", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        soundManager.playClick()
+                        onNavigateBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
@@ -86,6 +93,12 @@ fun StatisticsScreen(
                             Text("PROGRESSION", color = Color(0xFFBB86FC), fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
                             
                             ProgressCard("Badge Collection", unlockedBadges.size, totalBadges, "Badges Unlocked")
+                            
+                            // Achievement Statistics Integration
+                            val totalAchievements = com.example.myapplication.model.AchievementData.allAchievements.size
+                            val unlockedAchievements = com.example.myapplication.model.AchievementData.allAchievements.count { it.isUnlocked(currentUser) }
+                            ProgressCard("Achievement Hunter", unlockedAchievements, totalAchievements, "Achievements Unlocked")
+
                             ProgressCard("Next Level Reach", currentUser.xp, currentUser.xpToNextLevel(), "XP Progress")
                         }
                     }
@@ -148,6 +161,7 @@ fun StatGrid(user: User) {
         "Total XP" to user.totalXpEarned,
         "Workouts" to user.totalWorkouts,
         "Best Streak" to user.highestStreak,
+        "Promotions" to user.totalPromotions,
         "Pushups" to user.pushups,
         "Pullups" to user.pullups,
         "Plank Sec" to user.plankTime

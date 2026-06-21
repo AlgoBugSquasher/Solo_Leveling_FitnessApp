@@ -52,7 +52,17 @@ object XpCalculator {
         return totalXp
     }
 
+    /**
+     * Calculates the XP required to reach the next level.
+     * Follows a quadratic progression for a long-term RPG journey:
+     * Level 1 -> 2: 3000 XP
+     * Level 2 -> 3: 4500 XP
+     * Level 3 -> 4: 6500 XP
+     * Level 4 -> 5: 9000 XP
+     * Level 5 -> 6: 12000 XP
+     */
     fun calculateRequiredXP(level: Int): Int {
-        return 100 + (level * level * 25)
+        // Formula derived: 250*level^2 + 750*level + 2000
+        return (250 * level * level) + (750 * level) + 2000
     }
 }

@@ -1,126 +1,182 @@
 [
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_shadow_monarch.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/shadow_monarch.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xxhdpi\\ic_launcher_round.webp"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "com.example.myapplication.app-debug-48:/raw_badge_common.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/badge_common.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_night_sentinel.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/night_sentinel.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_ic_launcher_background.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\ic_launcher_background.xml"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_shadow_trainee.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/shadow_trainee.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_rank_promotion.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\rank_promotion.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_silent_killer.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/silent_killer.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_quest_complete.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\quest_complete.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xhdpi_ic_launcher_round.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xhdpi/ic_launcher_round.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\xml_backup_rules.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\xml\\backup_rules.xml"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/xml_backup_rules.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/xml/backup_rules.xml"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_click_subtle.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\click_subtle.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xhdpi_ic_launcher.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xhdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_silent_killer.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\silent_killer.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/ic_launcher_foreground.xml"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_night_sentinel.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\night_sentinel.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-mdpi_ic_launcher_round.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-mdpi/ic_launcher_round.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xhdpi\\ic_launcher_round.webp"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_initiate_hunter.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/initiate_hunter.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_initiate_hunter.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\initiate_hunter.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_phantom_warrior.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/phantom_warrior.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_ic_launcher_foreground.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\ic_launcher_foreground.xml"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_ic_launcher_background.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/ic_launcher_background.xml"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_abyss_walker.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\abyss_walker.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_abyss_walker.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/abyss_walker.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_eclipse_sovereign.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\eclipse_sovereign.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_elite_hunter.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/elite_hunter.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_monarch_candidate.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\monarch_candidate.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_void_reaper.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/void_reaper.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xxxhdpi\\ic_launcher.webp"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "com.example.myapplication.app-debug-48:/raw_level_up.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/level_up.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_chaos_executioner.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/chaos_executioner.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_elite_hunter.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\elite_hunter.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-mdpi_ic_launcher.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-mdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-anydpi-v26\\ic_launcher.xml"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_assianite.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/assianite.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_assianite.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\assianite.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_iron_body.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/iron_body.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-mdpi\\ic_launcher.webp"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xxhdpi_ic_launcher.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xxhdpi/ic_launcher.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\xml_data_extraction_rules.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\xml\\data_extraction_rules.xml"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-hdpi_ic_launcher_round.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-hdpi/ic_launcher_round.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_shadow_trainee.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\shadow_trainee.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xxxhdpi_ic_launcher.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xxxhdpi/ic_launcher.webp"
+        "merged": "com.example.myapplication.app-debug-48:/raw_badge_rare.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/badge_rare.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xxxhdpi_ic_launcher_round.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xxxhdpi/ic_launcher_round.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_level_up.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\level_up.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-hdpi_ic_launcher.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-hdpi/ic_launcher.webp"
+        "merged": "com.example.myapplication.app-debug-48:/raw_badge_epic.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/badge_epic.mp3"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/mipmap-xxhdpi_ic_launcher_round.webp.flat",
-        "source": "com.example.myapplication.app-main-50:/mipmap-xxhdpi/ic_launcher_round.webp"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_phantom_warrior.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\phantom_warrior.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_eclipse_sovereign.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/eclipse_sovereign.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_void_reaper.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\void_reaper.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_monarch_candidate.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/monarch_candidate.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_shadow_monarch.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\shadow_monarch.png"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/xml_data_extraction_rules.xml.flat",
-        "source": "com.example.myapplication.app-main-50:/xml/data_extraction_rules.xml"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xxhdpi\\ic_launcher.webp"
     },
     {
-        "merged": "com.example.myapplication.app-debug-48:/drawable_beast_crusher.png.flat",
-        "source": "com.example.myapplication.app-main-50:/drawable/beast_crusher.png"
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xhdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "com.example.myapplication.app-debug-48:/raw_badge_legendary.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/badge_legendary.mp3"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_badge_rare.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\badge_rare.mp3"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-anydpi-v26\\ic_launcher_round.xml"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_badge_legendary.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\badge_legendary.mp3"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_badge_epic.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\badge_epic.mp3"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\raw_badge_common.mp3.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\raw\\badge_common.mp3"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_chaos_executioner.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\chaos_executioner.png"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-mdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-xxxhdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-hdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\mipmap-hdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_beast_crusher.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\beast_crusher.png"
+    },
+    {
+        "merged": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-debug-48:\\drawable_iron_body.png.flat",
+        "source": "C:\\Users\\omkri\\.gradle\\daemon\\9.4.1\\com.example.myapplication.app-main-50:\\drawable\\iron_body.png"
+    },
+    {
+        "merged": "com.example.myapplication.app-debug-48:/raw_quest_complete.mp3.flat",
+        "source": "com.example.myapplication.app-main-50:/raw/quest_complete.mp3"
     }
 ]

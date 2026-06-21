@@ -12,33 +12,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.myapplication.data.AppDatabase
 import com.example.myapplication.data.FitnessRepository
-import com.example.myapplication.ui.screens.HomeScreen
-import com.example.myapplication.ui.theme.MyApplicationTheme
-import com.example.myapplication.viewmodel.HomeViewModel
-import com.example.myapplication.viewmodel.WorkoutViewModel
-
+import com.example.myapplication.ui.screens.*
+import com.example.myapplication.viewmodel.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.ui.screens.WorkoutScreen
-
-import com.example.myapplication.viewmodel.AbilityViewModel
-import com.example.myapplication.ui.screens.AbilityScreen
-import com.example.myapplication.viewmodel.TitleViewModel
-import com.example.myapplication.ui.screens.TitleArchiveScreen
-import com.example.myapplication.viewmodel.BadgeViewModel
-import com.example.myapplication.ui.screens.HunterArchiveScreen
-import com.example.myapplication.viewmodel.StatisticsViewModel
-import com.example.myapplication.ui.screens.StatisticsScreen
-import com.example.myapplication.viewmodel.WorkoutHistoryViewModel
-import com.example.myapplication.ui.screens.WorkoutHistoryScreen
+import com.example.myapplication.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         val database = AppDatabase.getDatabase(this)
-        val repository = FitnessRepository(database.userDao(), database.abilityDao(), database.workoutDao(), database.titleDao())
+        val repository = FitnessRepository(database.userDao(), database.abilityDao(), database.workoutDao(), database.titleDao(), database.trainingPlanDao())
         
         @Suppress("UNCHECKED_CAST")
         val viewModelFactory = object : ViewModelProvider.Factory {
@@ -51,6 +37,9 @@ class MainActivity : ComponentActivity() {
                     modelClass.isAssignableFrom(TitleViewModel::class.java) -> TitleViewModel(repository) as T
                     modelClass.isAssignableFrom(StatisticsViewModel::class.java) -> StatisticsViewModel(repository) as T
                     modelClass.isAssignableFrom(WorkoutHistoryViewModel::class.java) -> WorkoutHistoryViewModel(repository) as T
+                    modelClass.isAssignableFrom(AchievementViewModel::class.java) -> AchievementViewModel(repository) as T
+                    modelClass.isAssignableFrom(ArchiveHubViewModel::class.java) -> ArchiveHubViewModel(repository) as T
+                    modelClass.isAssignableFrom(TrainingPlanViewModel::class.java) -> TrainingPlanViewModel(repository) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }
@@ -68,14 +57,60 @@ class MainActivity : ComponentActivity() {
                     NavHost(navController = navController, startDestination = "home") {
                         composable("home") {
                             val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
+                            val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
                             HomeScreen(
                                 viewModel = homeViewModel,
+                                trainingViewModel = trainingViewModel,
                                 onStartWorkout = { navController.navigate("workout") },
-                                onViewAbilities = { navController.navigate("abilities") },
+                                onViewArchiveHub = { navController.navigate("archive_hub") },
+                                onViewProfileHub = { navController.navigate("profile_hub") },
+                                onOpenTrainingPlan = { navController.navigate("training_plan") }
+                            )
+                        }
+                        composable("training_plan") {
+                            val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
+                            TrainingPlanScreen(
+                                viewModel = trainingViewModel,
+                                onNavigateBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("archive_hub") {
+                            val archiveHubViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[ArchiveHubViewModel::class.java]
+                            ArchiveHubScreen(
+                                viewModel = archiveHubViewModel,
                                 onViewArchive = { navController.navigate("archive") },
+                                onViewAchievements = { navController.navigate("achievements") },
+                                onViewTitles = { navController.navigate("titles") },
+                                onNavigateBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("profile_hub") {
+                            val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
+                            HunterProfileScreen(
+                                viewModel = homeViewModel,
                                 onViewStatistics = { navController.navigate("statistics") },
                                 onViewHistory = { navController.navigate("history") },
-                                onViewTitles = { navController.navigate("titles") }
+                                onViewAbilities = { navController.navigate("abilities") },
+                                onViewSettings = { navController.navigate("settings") },
+                                onNavigateBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("settings") {
+                            val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
+                            SettingsScreen(
+                                viewModel = homeViewModel,
+                                onViewAbout = { navController.navigate("about") },
+                                onNavigateBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable("about") {
+                            AboutScreen(onNavigateBack = { navController.popBackStack() })
+                        }
+                        composable("achievements") {
+                            val achievementViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AchievementViewModel::class.java]
+                            AchievementArchiveScreen(
+                                viewModel = achievementViewModel,
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                         composable("titles") {
@@ -87,8 +122,10 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("workout") {
                             val workoutViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[WorkoutViewModel::class.java]
+                            val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
                             WorkoutScreen(
                                 viewModel = workoutViewModel,
+                                trainingViewModel = trainingViewModel,
                                 onNavigateBack = { navController.popBackStack() }
                             )
                         }

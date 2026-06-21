@@ -24,6 +24,14 @@ int drawable silent_killer 0x0
 int drawable void_reaper 0x0
 int mipmap ic_launcher 0x0
 int mipmap ic_launcher_round 0x0
+int raw badge_common 0x0
+int raw badge_epic 0x0
+int raw badge_legendary 0x0
+int raw badge_rare 0x0
+int raw click_subtle 0x0
+int raw level_up 0x0
+int raw quest_complete 0x0
+int raw rank_promotion 0x0
 int string app_name 0x0
 int style Theme_MyApplication 0x0
 int xml backup_rules 0x0

@@ -13,12 +13,27 @@ class FitnessRepository(
     private val userDao: UserDao,
     private val abilityDao: AbilityDao,
     private val workoutDao: WorkoutDao,
-    private val titleDao: TitleDao
+    private val titleDao: TitleDao,
+    private val trainingPlanDao: TrainingPlanDao
 ) {
     val user: Flow<User?> = userDao.getUser()
     val abilities: Flow<List<Ability>> = abilityDao.getAllAbilities()
     val allWorkouts: Flow<List<WorkoutWithExercises>> = workoutDao.getAllWorkouts()
     val allTitles: Flow<List<Title>> = titleDao.getAllTitles()
+    val trainingPlan: Flow<List<com.example.myapplication.model.TrainingDay>> = trainingPlanDao.getTrainingPlan()
+    val weeklyBonus: Flow<com.example.myapplication.model.WeeklyBonusEntity?> = trainingPlanDao.getWeeklyBonus()
+
+    suspend fun insertTrainingDays(days: List<com.example.myapplication.model.TrainingDay>) {
+        trainingPlanDao.insertTrainingDays(days)
+    }
+
+    suspend fun updateTrainingDay(day: com.example.myapplication.model.TrainingDay) {
+        trainingPlanDao.updateTrainingDay(day)
+    }
+
+    suspend fun updateWeeklyBonus(bonus: com.example.myapplication.model.WeeklyBonusEntity) {
+        trainingPlanDao.insertWeeklyBonus(bonus)
+    }
 
     suspend fun insertWorkout(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {
         workoutDao.insertWorkoutWithExercises(workout, exercises)
