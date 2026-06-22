@@ -10,6 +10,7 @@ import androidx.sqlite.SQLiteStatement
 import com.example.myapplication.model.User
 import javax.`annotation`.processing.Generated
 import kotlin.Boolean
+import kotlin.Double
 import kotlin.Int
 import kotlin.Long
 import kotlin.String
@@ -32,7 +33,7 @@ public class UserDao_Impl(
   init {
     this.__db = __db
     this.__insertAdapterOfUser = object : EntityInsertAdapter<User>() {
-      protected override fun createQuery(): String = "INSERT OR REPLACE INTO `user_table` (`id`,`xp`,`level`,`streak`,`rank`,`pushups`,`pullups`,`plankTime`,`totalPikePushups`,`totalPseudoPlanchePushups`,`totalHangingSeconds`,`totalExplosivePullups`,`totalXpEarned`,`totalWorkouts`,`highestStreak`,`totalPromotions`,`highestRank`,`lastWorkoutDate`,`activeTitle`,`soundEnabled`,`maxPushupsSingleWorkout`,`maxPullupsSingleWorkout`,`maxPlankSingleWorkout`,`maxXpSingleWorkout`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+      protected override fun createQuery(): String = "INSERT OR REPLACE INTO `user_table` (`id`,`xp`,`level`,`streak`,`rank`,`pushups`,`pullups`,`plankTime`,`totalDistanceKm`,`totalPikePushups`,`totalPseudoPlanchePushups`,`totalHangingSeconds`,`totalExplosivePullups`,`totalXpEarned`,`totalWorkouts`,`highestStreak`,`totalPromotions`,`highestRank`,`lastWorkoutDate`,`lastQuestRefreshDate`,`activeTitle`,`soundEnabled`,`maxPushupsSingleWorkout`,`maxPullupsSingleWorkout`,`maxPlankSingleWorkout`,`maxXpSingleWorkout`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
       protected override fun bind(statement: SQLiteStatement, entity: User) {
         statement.bindLong(1, entity.id.toLong())
@@ -43,32 +44,34 @@ public class UserDao_Impl(
         statement.bindLong(6, entity.pushups.toLong())
         statement.bindLong(7, entity.pullups.toLong())
         statement.bindLong(8, entity.plankTime.toLong())
-        statement.bindLong(9, entity.totalPikePushups.toLong())
-        statement.bindLong(10, entity.totalPseudoPlanchePushups.toLong())
-        statement.bindLong(11, entity.totalHangingSeconds.toLong())
-        statement.bindLong(12, entity.totalExplosivePullups.toLong())
-        statement.bindLong(13, entity.totalXpEarned.toLong())
-        statement.bindLong(14, entity.totalWorkouts.toLong())
-        statement.bindLong(15, entity.highestStreak.toLong())
-        statement.bindLong(16, entity.totalPromotions.toLong())
-        statement.bindText(17, entity.highestRank)
-        statement.bindLong(18, entity.lastWorkoutDate)
+        statement.bindDouble(9, entity.totalDistanceKm)
+        statement.bindLong(10, entity.totalPikePushups.toLong())
+        statement.bindLong(11, entity.totalPseudoPlanchePushups.toLong())
+        statement.bindLong(12, entity.totalHangingSeconds.toLong())
+        statement.bindLong(13, entity.totalExplosivePullups.toLong())
+        statement.bindLong(14, entity.totalXpEarned.toLong())
+        statement.bindLong(15, entity.totalWorkouts.toLong())
+        statement.bindLong(16, entity.highestStreak.toLong())
+        statement.bindLong(17, entity.totalPromotions.toLong())
+        statement.bindText(18, entity.highestRank)
+        statement.bindLong(19, entity.lastWorkoutDate)
+        statement.bindLong(20, entity.lastQuestRefreshDate)
         val _tmpActiveTitle: String? = entity.activeTitle
         if (_tmpActiveTitle == null) {
-          statement.bindNull(19)
+          statement.bindNull(21)
         } else {
-          statement.bindText(19, _tmpActiveTitle)
+          statement.bindText(21, _tmpActiveTitle)
         }
         val _tmp: Int = if (entity.soundEnabled) 1 else 0
-        statement.bindLong(20, _tmp.toLong())
-        statement.bindLong(21, entity.maxPushupsSingleWorkout.toLong())
-        statement.bindLong(22, entity.maxPullupsSingleWorkout.toLong())
-        statement.bindLong(23, entity.maxPlankSingleWorkout.toLong())
-        statement.bindLong(24, entity.maxXpSingleWorkout.toLong())
+        statement.bindLong(22, _tmp.toLong())
+        statement.bindLong(23, entity.maxPushupsSingleWorkout.toLong())
+        statement.bindLong(24, entity.maxPullupsSingleWorkout.toLong())
+        statement.bindLong(25, entity.maxPlankSingleWorkout.toLong())
+        statement.bindLong(26, entity.maxXpSingleWorkout.toLong())
       }
     }
     this.__updateAdapterOfUser = object : EntityDeleteOrUpdateAdapter<User>() {
-      protected override fun createQuery(): String = "UPDATE OR ABORT `user_table` SET `id` = ?,`xp` = ?,`level` = ?,`streak` = ?,`rank` = ?,`pushups` = ?,`pullups` = ?,`plankTime` = ?,`totalPikePushups` = ?,`totalPseudoPlanchePushups` = ?,`totalHangingSeconds` = ?,`totalExplosivePullups` = ?,`totalXpEarned` = ?,`totalWorkouts` = ?,`highestStreak` = ?,`totalPromotions` = ?,`highestRank` = ?,`lastWorkoutDate` = ?,`activeTitle` = ?,`soundEnabled` = ?,`maxPushupsSingleWorkout` = ?,`maxPullupsSingleWorkout` = ?,`maxPlankSingleWorkout` = ?,`maxXpSingleWorkout` = ? WHERE `id` = ?"
+      protected override fun createQuery(): String = "UPDATE OR ABORT `user_table` SET `id` = ?,`xp` = ?,`level` = ?,`streak` = ?,`rank` = ?,`pushups` = ?,`pullups` = ?,`plankTime` = ?,`totalDistanceKm` = ?,`totalPikePushups` = ?,`totalPseudoPlanchePushups` = ?,`totalHangingSeconds` = ?,`totalExplosivePullups` = ?,`totalXpEarned` = ?,`totalWorkouts` = ?,`highestStreak` = ?,`totalPromotions` = ?,`highestRank` = ?,`lastWorkoutDate` = ?,`lastQuestRefreshDate` = ?,`activeTitle` = ?,`soundEnabled` = ?,`maxPushupsSingleWorkout` = ?,`maxPullupsSingleWorkout` = ?,`maxPlankSingleWorkout` = ?,`maxXpSingleWorkout` = ? WHERE `id` = ?"
 
       protected override fun bind(statement: SQLiteStatement, entity: User) {
         statement.bindLong(1, entity.id.toLong())
@@ -79,29 +82,31 @@ public class UserDao_Impl(
         statement.bindLong(6, entity.pushups.toLong())
         statement.bindLong(7, entity.pullups.toLong())
         statement.bindLong(8, entity.plankTime.toLong())
-        statement.bindLong(9, entity.totalPikePushups.toLong())
-        statement.bindLong(10, entity.totalPseudoPlanchePushups.toLong())
-        statement.bindLong(11, entity.totalHangingSeconds.toLong())
-        statement.bindLong(12, entity.totalExplosivePullups.toLong())
-        statement.bindLong(13, entity.totalXpEarned.toLong())
-        statement.bindLong(14, entity.totalWorkouts.toLong())
-        statement.bindLong(15, entity.highestStreak.toLong())
-        statement.bindLong(16, entity.totalPromotions.toLong())
-        statement.bindText(17, entity.highestRank)
-        statement.bindLong(18, entity.lastWorkoutDate)
+        statement.bindDouble(9, entity.totalDistanceKm)
+        statement.bindLong(10, entity.totalPikePushups.toLong())
+        statement.bindLong(11, entity.totalPseudoPlanchePushups.toLong())
+        statement.bindLong(12, entity.totalHangingSeconds.toLong())
+        statement.bindLong(13, entity.totalExplosivePullups.toLong())
+        statement.bindLong(14, entity.totalXpEarned.toLong())
+        statement.bindLong(15, entity.totalWorkouts.toLong())
+        statement.bindLong(16, entity.highestStreak.toLong())
+        statement.bindLong(17, entity.totalPromotions.toLong())
+        statement.bindText(18, entity.highestRank)
+        statement.bindLong(19, entity.lastWorkoutDate)
+        statement.bindLong(20, entity.lastQuestRefreshDate)
         val _tmpActiveTitle: String? = entity.activeTitle
         if (_tmpActiveTitle == null) {
-          statement.bindNull(19)
+          statement.bindNull(21)
         } else {
-          statement.bindText(19, _tmpActiveTitle)
+          statement.bindText(21, _tmpActiveTitle)
         }
         val _tmp: Int = if (entity.soundEnabled) 1 else 0
-        statement.bindLong(20, _tmp.toLong())
-        statement.bindLong(21, entity.maxPushupsSingleWorkout.toLong())
-        statement.bindLong(22, entity.maxPullupsSingleWorkout.toLong())
-        statement.bindLong(23, entity.maxPlankSingleWorkout.toLong())
-        statement.bindLong(24, entity.maxXpSingleWorkout.toLong())
-        statement.bindLong(25, entity.id.toLong())
+        statement.bindLong(22, _tmp.toLong())
+        statement.bindLong(23, entity.maxPushupsSingleWorkout.toLong())
+        statement.bindLong(24, entity.maxPullupsSingleWorkout.toLong())
+        statement.bindLong(25, entity.maxPlankSingleWorkout.toLong())
+        statement.bindLong(26, entity.maxXpSingleWorkout.toLong())
+        statement.bindLong(27, entity.id.toLong())
       }
     }
   }
@@ -127,6 +132,7 @@ public class UserDao_Impl(
         val _columnIndexOfPushups: Int = getColumnIndexOrThrow(_stmt, "pushups")
         val _columnIndexOfPullups: Int = getColumnIndexOrThrow(_stmt, "pullups")
         val _columnIndexOfPlankTime: Int = getColumnIndexOrThrow(_stmt, "plankTime")
+        val _columnIndexOfTotalDistanceKm: Int = getColumnIndexOrThrow(_stmt, "totalDistanceKm")
         val _columnIndexOfTotalPikePushups: Int = getColumnIndexOrThrow(_stmt, "totalPikePushups")
         val _columnIndexOfTotalPseudoPlanchePushups: Int = getColumnIndexOrThrow(_stmt, "totalPseudoPlanchePushups")
         val _columnIndexOfTotalHangingSeconds: Int = getColumnIndexOrThrow(_stmt, "totalHangingSeconds")
@@ -137,6 +143,7 @@ public class UserDao_Impl(
         val _columnIndexOfTotalPromotions: Int = getColumnIndexOrThrow(_stmt, "totalPromotions")
         val _columnIndexOfHighestRank: Int = getColumnIndexOrThrow(_stmt, "highestRank")
         val _columnIndexOfLastWorkoutDate: Int = getColumnIndexOrThrow(_stmt, "lastWorkoutDate")
+        val _columnIndexOfLastQuestRefreshDate: Int = getColumnIndexOrThrow(_stmt, "lastQuestRefreshDate")
         val _columnIndexOfActiveTitle: Int = getColumnIndexOrThrow(_stmt, "activeTitle")
         val _columnIndexOfSoundEnabled: Int = getColumnIndexOrThrow(_stmt, "soundEnabled")
         val _columnIndexOfMaxPushupsSingleWorkout: Int = getColumnIndexOrThrow(_stmt, "maxPushupsSingleWorkout")
@@ -161,6 +168,8 @@ public class UserDao_Impl(
           _tmpPullups = _stmt.getLong(_columnIndexOfPullups).toInt()
           val _tmpPlankTime: Int
           _tmpPlankTime = _stmt.getLong(_columnIndexOfPlankTime).toInt()
+          val _tmpTotalDistanceKm: Double
+          _tmpTotalDistanceKm = _stmt.getDouble(_columnIndexOfTotalDistanceKm)
           val _tmpTotalPikePushups: Int
           _tmpTotalPikePushups = _stmt.getLong(_columnIndexOfTotalPikePushups).toInt()
           val _tmpTotalPseudoPlanchePushups: Int
@@ -181,6 +190,8 @@ public class UserDao_Impl(
           _tmpHighestRank = _stmt.getText(_columnIndexOfHighestRank)
           val _tmpLastWorkoutDate: Long
           _tmpLastWorkoutDate = _stmt.getLong(_columnIndexOfLastWorkoutDate)
+          val _tmpLastQuestRefreshDate: Long
+          _tmpLastQuestRefreshDate = _stmt.getLong(_columnIndexOfLastQuestRefreshDate)
           val _tmpActiveTitle: String?
           if (_stmt.isNull(_columnIndexOfActiveTitle)) {
             _tmpActiveTitle = null
@@ -199,7 +210,7 @@ public class UserDao_Impl(
           _tmpMaxPlankSingleWorkout = _stmt.getLong(_columnIndexOfMaxPlankSingleWorkout).toInt()
           val _tmpMaxXpSingleWorkout: Int
           _tmpMaxXpSingleWorkout = _stmt.getLong(_columnIndexOfMaxXpSingleWorkout).toInt()
-          _result = User(_tmpId,_tmpXp,_tmpLevel,_tmpStreak,_tmpRank,_tmpPushups,_tmpPullups,_tmpPlankTime,_tmpTotalPikePushups,_tmpTotalPseudoPlanchePushups,_tmpTotalHangingSeconds,_tmpTotalExplosivePullups,_tmpTotalXpEarned,_tmpTotalWorkouts,_tmpHighestStreak,_tmpTotalPromotions,_tmpHighestRank,_tmpLastWorkoutDate,_tmpActiveTitle,_tmpSoundEnabled,_tmpMaxPushupsSingleWorkout,_tmpMaxPullupsSingleWorkout,_tmpMaxPlankSingleWorkout,_tmpMaxXpSingleWorkout)
+          _result = User(_tmpId,_tmpXp,_tmpLevel,_tmpStreak,_tmpRank,_tmpPushups,_tmpPullups,_tmpPlankTime,_tmpTotalDistanceKm,_tmpTotalPikePushups,_tmpTotalPseudoPlanchePushups,_tmpTotalHangingSeconds,_tmpTotalExplosivePullups,_tmpTotalXpEarned,_tmpTotalWorkouts,_tmpHighestStreak,_tmpTotalPromotions,_tmpHighestRank,_tmpLastWorkoutDate,_tmpLastQuestRefreshDate,_tmpActiveTitle,_tmpSoundEnabled,_tmpMaxPushupsSingleWorkout,_tmpMaxPullupsSingleWorkout,_tmpMaxPlankSingleWorkout,_tmpMaxXpSingleWorkout)
         } else {
           _result = null
         }

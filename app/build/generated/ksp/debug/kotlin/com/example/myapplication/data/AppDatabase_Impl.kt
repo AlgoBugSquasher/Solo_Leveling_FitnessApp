@@ -47,18 +47,29 @@ public class AppDatabase_Impl : AppDatabase() {
     TrainingPlanDao_Impl(this)
   }
 
+  private val _journeyEventDao: Lazy<JourneyEventDao> = lazy {
+    JourneyEventDao_Impl(this)
+  }
+
+  private val _dailyQuestDao: Lazy<DailyQuestDao> = lazy {
+    DailyQuestDao_Impl(this)
+  }
+
   protected override fun createOpenDelegate(): RoomOpenDelegate {
-    val _openDelegate: RoomOpenDelegate = object : RoomOpenDelegate(13, "29516bb96180e73bd6b449cdf98a417d", "92f7dbada46e457a2022552a1c199c06") {
+    val _openDelegate: RoomOpenDelegate = object : RoomOpenDelegate(18, "29fa8dae26de78c2562cbb7526406a9f", "d445f6d0b75ac8e3b9b7673a7d900d6c") {
       public override fun createAllTables(connection: SQLiteConnection) {
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `user_table` (`id` INTEGER NOT NULL, `xp` INTEGER NOT NULL, `level` INTEGER NOT NULL, `streak` INTEGER NOT NULL, `rank` TEXT NOT NULL, `pushups` INTEGER NOT NULL, `pullups` INTEGER NOT NULL, `plankTime` INTEGER NOT NULL, `totalPikePushups` INTEGER NOT NULL, `totalPseudoPlanchePushups` INTEGER NOT NULL, `totalHangingSeconds` INTEGER NOT NULL, `totalExplosivePullups` INTEGER NOT NULL, `totalXpEarned` INTEGER NOT NULL, `totalWorkouts` INTEGER NOT NULL, `highestStreak` INTEGER NOT NULL, `totalPromotions` INTEGER NOT NULL, `highestRank` TEXT NOT NULL, `lastWorkoutDate` INTEGER NOT NULL, `activeTitle` TEXT, `soundEnabled` INTEGER NOT NULL, `maxPushupsSingleWorkout` INTEGER NOT NULL, `maxPullupsSingleWorkout` INTEGER NOT NULL, `maxPlankSingleWorkout` INTEGER NOT NULL, `maxXpSingleWorkout` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `user_table` (`id` INTEGER NOT NULL, `xp` INTEGER NOT NULL, `level` INTEGER NOT NULL, `streak` INTEGER NOT NULL, `rank` TEXT NOT NULL, `pushups` INTEGER NOT NULL, `pullups` INTEGER NOT NULL, `plankTime` INTEGER NOT NULL, `totalDistanceKm` REAL NOT NULL, `totalPikePushups` INTEGER NOT NULL, `totalPseudoPlanchePushups` INTEGER NOT NULL, `totalHangingSeconds` INTEGER NOT NULL, `totalExplosivePullups` INTEGER NOT NULL, `totalXpEarned` INTEGER NOT NULL, `totalWorkouts` INTEGER NOT NULL, `highestStreak` INTEGER NOT NULL, `totalPromotions` INTEGER NOT NULL, `highestRank` TEXT NOT NULL, `lastWorkoutDate` INTEGER NOT NULL, `lastQuestRefreshDate` INTEGER NOT NULL, `activeTitle` TEXT, `soundEnabled` INTEGER NOT NULL, `maxPushupsSingleWorkout` INTEGER NOT NULL, `maxPullupsSingleWorkout` INTEGER NOT NULL, `maxPlankSingleWorkout` INTEGER NOT NULL, `maxXpSingleWorkout` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `workout_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` INTEGER NOT NULL, `totalXpGained` INTEGER NOT NULL)")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `exercise_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workoutId` INTEGER NOT NULL, `name` TEXT NOT NULL, `reps` INTEGER, `sets` INTEGER NOT NULL, `duration` INTEGER, FOREIGN KEY(`workoutId`) REFERENCES `workout_table`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `ability_table` (`name` TEXT NOT NULL, `isUnlocked` INTEGER NOT NULL, `requiredPushups` INTEGER NOT NULL, `requiredPullups` INTEGER NOT NULL, `requiredPlankTime` INTEGER NOT NULL, `requiredLevel` INTEGER NOT NULL, `requiredStreak` INTEGER NOT NULL, PRIMARY KEY(`name`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `title_table` (`name` TEXT NOT NULL, `requiredStreak` INTEGER NOT NULL, `isUnlocked` INTEGER NOT NULL, PRIMARY KEY(`name`))")
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `training_plan_table` (`dayOfWeek` INTEGER NOT NULL, `pushups` INTEGER NOT NULL, `pullups` INTEGER NOT NULL, `plankSeconds` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `lastCompletedWeek` INTEGER NOT NULL, `lastCompletedYear` INTEGER NOT NULL, PRIMARY KEY(`dayOfWeek`))")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `training_plan_table` (`dayOfWeek` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `lastCompletedWeek` INTEGER NOT NULL, `lastCompletedYear` INTEGER NOT NULL, `lastRewardWeek` INTEGER NOT NULL, `lastRewardYear` INTEGER NOT NULL, PRIMARY KEY(`dayOfWeek`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `weekly_bonus_table` (`id` INTEGER NOT NULL, `lastBonusWeek` INTEGER NOT NULL, `lastBonusYear` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `planned_exercise_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `dayOfWeek` INTEGER NOT NULL, `name` TEXT NOT NULL, `trackingType` TEXT NOT NULL, `sets` INTEGER, `reps` INTEGER, `seconds` INTEGER, `distanceKm` REAL, `isCompleted` INTEGER NOT NULL, `lastCompletedWeek` INTEGER NOT NULL, `lastCompletedYear` INTEGER NOT NULL)")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `journey_event_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `icon` TEXT NOT NULL)")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `daily_quest_table` (`id` INTEGER NOT NULL, `title` TEXT NOT NULL, `goal` TEXT NOT NULL, `xpReward` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `sets` INTEGER, `reps` INTEGER, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
-        connection.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '29516bb96180e73bd6b449cdf98a417d')")
+        connection.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '29fa8dae26de78c2562cbb7526406a9f')")
       }
 
       public override fun dropAllTables(connection: SQLiteConnection) {
@@ -69,6 +80,9 @@ public class AppDatabase_Impl : AppDatabase() {
         connection.execSQL("DROP TABLE IF EXISTS `title_table`")
         connection.execSQL("DROP TABLE IF EXISTS `training_plan_table`")
         connection.execSQL("DROP TABLE IF EXISTS `weekly_bonus_table`")
+        connection.execSQL("DROP TABLE IF EXISTS `planned_exercise_table`")
+        connection.execSQL("DROP TABLE IF EXISTS `journey_event_table`")
+        connection.execSQL("DROP TABLE IF EXISTS `daily_quest_table`")
       }
 
       public override fun onCreate(connection: SQLiteConnection) {
@@ -96,6 +110,7 @@ public class AppDatabase_Impl : AppDatabase() {
         _columnsUserTable.put("pushups", TableInfo.Column("pushups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("pullups", TableInfo.Column("pullups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("plankTime", TableInfo.Column("plankTime", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsUserTable.put("totalDistanceKm", TableInfo.Column("totalDistanceKm", "REAL", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("totalPikePushups", TableInfo.Column("totalPikePushups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("totalPseudoPlanchePushups", TableInfo.Column("totalPseudoPlanchePushups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("totalHangingSeconds", TableInfo.Column("totalHangingSeconds", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
@@ -106,6 +121,7 @@ public class AppDatabase_Impl : AppDatabase() {
         _columnsUserTable.put("totalPromotions", TableInfo.Column("totalPromotions", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("highestRank", TableInfo.Column("highestRank", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("lastWorkoutDate", TableInfo.Column("lastWorkoutDate", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsUserTable.put("lastQuestRefreshDate", TableInfo.Column("lastQuestRefreshDate", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("activeTitle", TableInfo.Column("activeTitle", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("soundEnabled", TableInfo.Column("soundEnabled", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsUserTable.put("maxPushupsSingleWorkout", TableInfo.Column("maxPushupsSingleWorkout", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
@@ -203,12 +219,11 @@ public class AppDatabase_Impl : AppDatabase() {
         }
         val _columnsTrainingPlanTable: MutableMap<String, TableInfo.Column> = mutableMapOf()
         _columnsTrainingPlanTable.put("dayOfWeek", TableInfo.Column("dayOfWeek", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY))
-        _columnsTrainingPlanTable.put("pushups", TableInfo.Column("pushups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
-        _columnsTrainingPlanTable.put("pullups", TableInfo.Column("pullups", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
-        _columnsTrainingPlanTable.put("plankSeconds", TableInfo.Column("plankSeconds", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsTrainingPlanTable.put("isCompleted", TableInfo.Column("isCompleted", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsTrainingPlanTable.put("lastCompletedWeek", TableInfo.Column("lastCompletedWeek", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsTrainingPlanTable.put("lastCompletedYear", TableInfo.Column("lastCompletedYear", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsTrainingPlanTable.put("lastRewardWeek", TableInfo.Column("lastRewardWeek", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsTrainingPlanTable.put("lastRewardYear", TableInfo.Column("lastRewardYear", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         val _foreignKeysTrainingPlanTable: MutableSet<TableInfo.ForeignKey> = mutableSetOf()
         val _indicesTrainingPlanTable: MutableSet<TableInfo.Index> = mutableSetOf()
         val _infoTrainingPlanTable: TableInfo = TableInfo("training_plan_table", _columnsTrainingPlanTable, _foreignKeysTrainingPlanTable, _indicesTrainingPlanTable)
@@ -239,6 +254,72 @@ public class AppDatabase_Impl : AppDatabase() {
               | Found:
               |""".trimMargin() + _existingWeeklyBonusTable)
         }
+        val _columnsPlannedExerciseTable: MutableMap<String, TableInfo.Column> = mutableMapOf()
+        _columnsPlannedExerciseTable.put("id", TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("dayOfWeek", TableInfo.Column("dayOfWeek", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("name", TableInfo.Column("name", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("trackingType", TableInfo.Column("trackingType", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("sets", TableInfo.Column("sets", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("reps", TableInfo.Column("reps", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("seconds", TableInfo.Column("seconds", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("distanceKm", TableInfo.Column("distanceKm", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("isCompleted", TableInfo.Column("isCompleted", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("lastCompletedWeek", TableInfo.Column("lastCompletedWeek", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsPlannedExerciseTable.put("lastCompletedYear", TableInfo.Column("lastCompletedYear", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        val _foreignKeysPlannedExerciseTable: MutableSet<TableInfo.ForeignKey> = mutableSetOf()
+        val _indicesPlannedExerciseTable: MutableSet<TableInfo.Index> = mutableSetOf()
+        val _infoPlannedExerciseTable: TableInfo = TableInfo("planned_exercise_table", _columnsPlannedExerciseTable, _foreignKeysPlannedExerciseTable, _indicesPlannedExerciseTable)
+        val _existingPlannedExerciseTable: TableInfo = read(connection, "planned_exercise_table")
+        if (!_infoPlannedExerciseTable.equals(_existingPlannedExerciseTable)) {
+          return RoomOpenDelegate.ValidationResult(false, """
+              |planned_exercise_table(com.example.myapplication.model.PlannedExercise).
+              | Expected:
+              |""".trimMargin() + _infoPlannedExerciseTable + """
+              |
+              | Found:
+              |""".trimMargin() + _existingPlannedExerciseTable)
+        }
+        val _columnsJourneyEventTable: MutableMap<String, TableInfo.Column> = mutableMapOf()
+        _columnsJourneyEventTable.put("id", TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsJourneyEventTable.put("type", TableInfo.Column("type", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsJourneyEventTable.put("title", TableInfo.Column("title", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsJourneyEventTable.put("description", TableInfo.Column("description", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsJourneyEventTable.put("timestamp", TableInfo.Column("timestamp", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsJourneyEventTable.put("icon", TableInfo.Column("icon", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        val _foreignKeysJourneyEventTable: MutableSet<TableInfo.ForeignKey> = mutableSetOf()
+        val _indicesJourneyEventTable: MutableSet<TableInfo.Index> = mutableSetOf()
+        val _infoJourneyEventTable: TableInfo = TableInfo("journey_event_table", _columnsJourneyEventTable, _foreignKeysJourneyEventTable, _indicesJourneyEventTable)
+        val _existingJourneyEventTable: TableInfo = read(connection, "journey_event_table")
+        if (!_infoJourneyEventTable.equals(_existingJourneyEventTable)) {
+          return RoomOpenDelegate.ValidationResult(false, """
+              |journey_event_table(com.example.myapplication.model.JourneyEvent).
+              | Expected:
+              |""".trimMargin() + _infoJourneyEventTable + """
+              |
+              | Found:
+              |""".trimMargin() + _existingJourneyEventTable)
+        }
+        val _columnsDailyQuestTable: MutableMap<String, TableInfo.Column> = mutableMapOf()
+        _columnsDailyQuestTable.put("id", TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("title", TableInfo.Column("title", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("goal", TableInfo.Column("goal", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("xpReward", TableInfo.Column("xpReward", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("isCompleted", TableInfo.Column("isCompleted", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("sets", TableInfo.Column("sets", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsDailyQuestTable.put("reps", TableInfo.Column("reps", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        val _foreignKeysDailyQuestTable: MutableSet<TableInfo.ForeignKey> = mutableSetOf()
+        val _indicesDailyQuestTable: MutableSet<TableInfo.Index> = mutableSetOf()
+        val _infoDailyQuestTable: TableInfo = TableInfo("daily_quest_table", _columnsDailyQuestTable, _foreignKeysDailyQuestTable, _indicesDailyQuestTable)
+        val _existingDailyQuestTable: TableInfo = read(connection, "daily_quest_table")
+        if (!_infoDailyQuestTable.equals(_existingDailyQuestTable)) {
+          return RoomOpenDelegate.ValidationResult(false, """
+              |daily_quest_table(com.example.myapplication.model.DailyQuest).
+              | Expected:
+              |""".trimMargin() + _infoDailyQuestTable + """
+              |
+              | Found:
+              |""".trimMargin() + _existingDailyQuestTable)
+        }
         return RoomOpenDelegate.ValidationResult(true, null)
       }
     }
@@ -248,11 +329,11 @@ public class AppDatabase_Impl : AppDatabase() {
   protected override fun createInvalidationTracker(): InvalidationTracker {
     val _shadowTablesMap: MutableMap<String, String> = mutableMapOf()
     val _viewTables: MutableMap<String, Set<String>> = mutableMapOf()
-    return InvalidationTracker(this, _shadowTablesMap, _viewTables, "user_table", "workout_table", "exercise_table", "ability_table", "title_table", "training_plan_table", "weekly_bonus_table")
+    return InvalidationTracker(this, _shadowTablesMap, _viewTables, "user_table", "workout_table", "exercise_table", "ability_table", "title_table", "training_plan_table", "weekly_bonus_table", "planned_exercise_table", "journey_event_table", "daily_quest_table")
   }
 
   public override fun clearAllTables() {
-    super.performClear(true, "user_table", "workout_table", "exercise_table", "ability_table", "title_table", "training_plan_table", "weekly_bonus_table")
+    super.performClear(true, "user_table", "workout_table", "exercise_table", "ability_table", "title_table", "training_plan_table", "weekly_bonus_table", "planned_exercise_table", "journey_event_table", "daily_quest_table")
   }
 
   protected override fun getRequiredTypeConverterClasses(): Map<KClass<*>, List<KClass<*>>> {
@@ -262,6 +343,8 @@ public class AppDatabase_Impl : AppDatabase() {
     _typeConvertersMap.put(WorkoutDao::class, WorkoutDao_Impl.getRequiredConverters())
     _typeConvertersMap.put(TitleDao::class, TitleDao_Impl.getRequiredConverters())
     _typeConvertersMap.put(TrainingPlanDao::class, TrainingPlanDao_Impl.getRequiredConverters())
+    _typeConvertersMap.put(JourneyEventDao::class, JourneyEventDao_Impl.getRequiredConverters())
+    _typeConvertersMap.put(DailyQuestDao::class, DailyQuestDao_Impl.getRequiredConverters())
     return _typeConvertersMap
   }
 
@@ -284,4 +367,8 @@ public class AppDatabase_Impl : AppDatabase() {
   public override fun titleDao(): TitleDao = _titleDao.value
 
   public override fun trainingPlanDao(): TrainingPlanDao = _trainingPlanDao.value
+
+  public override fun journeyEventDao(): JourneyEventDao = _journeyEventDao.value
+
+  public override fun dailyQuestDao(): DailyQuestDao = _dailyQuestDao.value
 }

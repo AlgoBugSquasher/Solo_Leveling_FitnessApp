@@ -15,6 +15,7 @@ data class User(
     val pushups: Int = 0,
     val pullups: Int = 0,
     val plankTime: Int = 0,
+    val totalDistanceKm: Double = 0.0,
     // Mastery stats
     val totalPikePushups: Int = 0,
     val totalPseudoPlanchePushups: Int = 0,
@@ -28,6 +29,7 @@ data class User(
     val highestRank: String = "E-Rank Hunter",
     // Tracking
     val lastWorkoutDate: Long = 0,
+    val lastQuestRefreshDate: Long = 0,
     val activeTitle: String? = null,
     val soundEnabled: Boolean = true,
     // Personal Records

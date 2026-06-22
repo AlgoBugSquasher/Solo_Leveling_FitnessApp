@@ -25,6 +25,7 @@ drawable shadow_trainee
 drawable silent_killer
 drawable void_reaper
 mipmap ic_launcher
+mipmap ic_launcher_foreground
 mipmap ic_launcher_round
 raw badge_common
 raw badge_epic

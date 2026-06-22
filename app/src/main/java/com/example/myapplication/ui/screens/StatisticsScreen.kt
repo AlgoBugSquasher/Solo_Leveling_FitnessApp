@@ -164,7 +164,8 @@ fun StatGrid(user: User) {
         "Promotions" to user.totalPromotions,
         "Pushups" to user.pushups,
         "Pullups" to user.pullups,
-        "Plank Sec" to user.plankTime
+        "Plank Sec" to user.plankTime,
+        "Distance KM" to user.totalDistanceKm.toInt()
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -23,6 +23,7 @@ int drawable shadow_trainee 0x0
 int drawable silent_killer 0x0
 int drawable void_reaper 0x0
 int mipmap ic_launcher 0x0
+int mipmap ic_launcher_foreground 0x0
 int mipmap ic_launcher_round 0x0
 int raw badge_common 0x0
 int raw badge_epic 0x0

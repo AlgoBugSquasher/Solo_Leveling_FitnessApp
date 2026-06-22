@@ -1,7 +1,7 @@
 package com.example.myapplication.model
 
 enum class AchievementCategory {
-    STRENGTH, PULL_UP, CORE, WORKOUT, STREAK, LEVEL
+    STRENGTH, PULL_UP, CORE, WORKOUT, STREAK, LEVEL, RUNNING
 }
 
 data class Achievement(
@@ -20,6 +20,7 @@ data class Achievement(
             AchievementCategory.WORKOUT -> user.totalWorkouts
             AchievementCategory.STREAK -> user.highestStreak
             AchievementCategory.LEVEL -> user.level
+            AchievementCategory.RUNNING -> user.totalDistanceKm.toInt()
         }
     }
 
@@ -73,6 +74,13 @@ object AchievementData {
         Achievement("l2", "Capable Hunter", AchievementCategory.LEVEL, 25, "Reach Level 25.", "2️⃣5️⃣"),
         Achievement("l3", "Senior Hunter", AchievementCategory.LEVEL, 50, "Reach Level 50.", "5️⃣0️⃣"),
         Achievement("l4", "Master Hunter", AchievementCategory.LEVEL, 75, "Reach Level 75.", "7️⃣5️⃣"),
-        Achievement("l5", "Shadow Monarch", AchievementCategory.LEVEL, 100, "Reach Level 100.", "🌌")
+        Achievement("l5", "Shadow Monarch", AchievementCategory.LEVEL, 100, "Reach Level 100.", "🌌"),
+
+        // Running Achievements
+        Achievement("r1", "Quick Feet", AchievementCategory.RUNNING, 10, "Run a total of 10 KM.", "👟"),
+        Achievement("r2", "Road Warrior", AchievementCategory.RUNNING, 50, "Run a total of 50 KM.", "🛣️"),
+        Achievement("r3", "Marathoner", AchievementCategory.RUNNING, 100, "Run a total of 100 KM.", "🏃"),
+        Achievement("r4", "Apex Predator", AchievementCategory.RUNNING, 500, "Run a total of 500 KM.", "🐅"),
+        Achievement("r5", "God of Wind", AchievementCategory.RUNNING, 1000, "Run a total of 1,000 KM.", "🌬️")
     )
 }

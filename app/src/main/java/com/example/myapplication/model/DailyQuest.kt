@@ -1,7 +1,11 @@
 package com.example.myapplication.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "daily_quest_table")
 data class DailyQuest(
-    val id: Int,
+    @PrimaryKey val id: Int,
     val title: String,
     val goal: String,
     val xpReward: Int,

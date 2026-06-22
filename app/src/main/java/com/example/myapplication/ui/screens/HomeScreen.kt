@@ -87,9 +87,15 @@ fun HomeScreen(
     val user by viewModel.user.collectAsState()
     val quests by viewModel.dailyQuests.collectAsState()
     val plan by trainingViewModel.trainingPlan.collectAsState()
+    val allExercises by trainingViewModel.allExercises.collectAsState()
 
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
+
+    // Sync sound enabled state with user preferences
+    LaunchedEffect(user.soundEnabled) {
+        soundManager.setEnabled(user.soundEnabled)
+    }
 
     var unlockedBadge by remember { mutableStateOf<Badge?>(null) }
     var unlockedTitle by remember { mutableStateOf<Title?>(null) }
@@ -135,7 +141,7 @@ fun HomeScreen(
     }
 
     val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF121212), Color(0xFF2D1B4E))
+        colors = listOf(Color(0xFF050505), Color(0xFF121212))
     )
 
     if (unlockedBadge != null) {
@@ -197,11 +203,11 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
                 
                 UserHeader(user)
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Box {
                     XpProgressBar(user)
@@ -214,25 +220,27 @@ fun HomeScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     item {
-                        TrainingPlanPreviewCard(plan, onOpenTrainingPlan)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        TrainingPlanPreviewCard(plan, allExercises) {
+                            soundManager.playClick()
+                            onOpenTrainingPlan()
+                        }
                     }
 
                     item {
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Daily Quests",
                             style = MaterialTheme.typography.headlineSmall,
-                            color = Color.White,
+                            color = Color(0xFFFFD700),
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     items(quests) { quest ->
@@ -251,7 +259,7 @@ fun HomeScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 AnimatedButton(
                     onClick = {
@@ -260,11 +268,11 @@ fun HomeScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(72.dp)
+                        .height(60.dp)
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = Color(0xFFBB86FC),
+                        color = Color(0xFFFFD700),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -273,48 +281,51 @@ fun HomeScreen(
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 
-                AnimatedButton(
-                    onClick = {
-                        soundManager.playClick()
-                        onViewArchiveHub()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        border = BorderStroke(1.dp, Color(0xFF03DAC6)),
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.Transparent
+                    AnimatedButton(
+                        onClick = {
+                            soundManager.playClick()
+                            onViewArchiveHub()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("ARCHIVES", fontWeight = FontWeight.Bold, color = Color(0xFF03DAC6))
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1A1A1A).copy(alpha = 0.5f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("ARCHIVES", fontWeight = FontWeight.Bold, color = Color(0xFFFFD700))
+                            }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                AnimatedButton(
-                    onClick = {
-                        soundManager.playClick()
-                        onViewProfileHub()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        border = BorderStroke(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color.Transparent
+                    AnimatedButton(
+                        onClick = {
+                            soundManager.playClick()
+                            onViewProfileHub()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("HUNTER PROFILE", fontWeight = FontWeight.Bold, color = Color(0xFFBB86FC))
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1A1A1A).copy(alpha = 0.5f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("HUNTER PROFILE", fontWeight = FontWeight.Bold, color = Color(0xFFFFD700))
+                            }
                         }
                     }
                 }
@@ -324,7 +335,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun TrainingPlanPreviewCard(plan: List<com.example.myapplication.model.TrainingDay>, onOpen: () -> Unit) {
+fun TrainingPlanPreviewCard(plan: List<com.example.myapplication.model.TrainingDay>, allExercises: List<com.example.myapplication.model.PlannedExercise>, onOpen: () -> Unit) {
     val calendar = Calendar.getInstance()
     val week = calendar.get(Calendar.WEEK_OF_YEAR)
     val year = calendar.get(Calendar.YEAR)
@@ -339,15 +350,15 @@ fun TrainingPlanPreviewCard(plan: List<com.example.myapplication.model.TrainingD
         else -> 7
     }
 
-    val activeDays = plan.filter { it.pushups > 0 || it.pullups > 0 || it.plankSeconds > 0 }
-    val completedCount = activeDays.count { it.isCompleted && it.lastCompletedWeek == week && it.lastCompletedYear == year }
-    val todayPlan = plan.find { it.dayOfWeek == dayOfWeek }
+    val activeDayOfWeek = allExercises.map { it.dayOfWeek }.distinct()
+    val completedCount = plan.count { it.dayOfWeek in activeDayOfWeek && it.isCompleted && it.lastCompletedWeek == week && it.lastCompletedYear == year }
+    val todayExercises = allExercises.filter { it.dayOfWeek == dayOfWeek }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.5f)),
+            .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.4f), RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212).copy(alpha = 0.8f)),
         shape = RoundedCornerShape(16.dp),
         onClick = onOpen
     ) {
@@ -359,11 +370,11 @@ fun TrainingPlanPreviewCard(plan: List<com.example.myapplication.model.TrainingD
             ) {
                 Text(
                     "TRAINING PLAN",
-                    color = Color(0xFFBB86FC),
+                    color = Color(0xFFFFD700),
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 )
                 Text(
-                    "$completedCount / ${activeDays.size} Days",
+                    "$completedCount / ${activeDayOfWeek.size} Days",
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
@@ -372,27 +383,53 @@ fun TrainingPlanPreviewCard(plan: List<com.example.myapplication.model.TrainingD
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            if (todayPlan != null && (todayPlan.pushups > 0 || todayPlan.pullups > 0 || todayPlan.plankSeconds > 0)) {
+            if (todayExercises.isNotEmpty()) {
                 Text("Today's Training:", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    if (todayPlan.pushups > 0) TrainingStat("${todayPlan.pushups} Pushups")
-                    if (todayPlan.pullups > 0) TrainingStat("${todayPlan.pullups} Pullups")
-                    if (todayPlan.plankSeconds > 0) TrainingStat("${todayPlan.plankSeconds}s Plank")
+                Spacer(modifier = Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    todayExercises.take(3).forEach { ex ->
+                        val isCompleted = ex.isCompleted && ex.lastCompletedWeek == week && ex.lastCompletedYear == year
+                        
+                        val text = when (ex.trackingType) {
+                            com.example.myapplication.model.ExerciseTrackingType.REPS -> "${ex.sets} × ${ex.reps} ${ex.name}"
+                            com.example.myapplication.model.ExerciseTrackingType.SECONDS -> "${ex.sets} × ${ex.seconds}s ${ex.name}"
+                            com.example.myapplication.model.ExerciseTrackingType.DISTANCE -> "${ex.name} ${ex.distanceKm} KM"
+                        }
+                        TrainingStat(text, isCompleted)
+                    }
+                    if (todayExercises.size > 3) {
+                        Text("+ ${todayExercises.size - 3} more", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             } else {
                 Text("REST DAY", color = Color(0xFF03DAC6), fontWeight = FontWeight.Black, fontSize = 14.sp)
             }
             
             Spacer(modifier = Modifier.height(12.dp))
-            Text("OPEN PLAN >", color = Color(0xFFBB86FC), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.End))
+            Text("OPEN PLAN >", color = Color(0xFFFFD700), fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.End))
         }
     }
 }
 
 @Composable
-fun TrainingStat(text: String) {
-    Text(text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+fun TrainingStat(text: String, isCompleted: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (isCompleted) {
+            Icon(
+                Icons.Default.Check, 
+                contentDescription = null, 
+                tint = Color(0xFF4CAF50), 
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+        }
+        Text(
+            text = text, 
+            color = if (isCompleted) Color(0xFF4CAF50) else Color.White, 
+            fontSize = 13.sp, 
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 @Composable
@@ -451,7 +488,7 @@ fun RankPromotionAnimation(
         ), label = "energyScale"
     )
 
-    val particles = remember { List(60) { EnhancedParticleState(Color(0xFFBB86FC), 2) } }
+    val particles = remember { List(60) { EnhancedParticleState(Color(0xFFFFD700), 2) } }
     LaunchedEffect(particles) {
         val startTime = System.currentTimeMillis()
         while(true) {
@@ -509,7 +546,7 @@ fun RankPromotionAnimation(
                             .graphicsLayer(scaleX = energyScale, scaleY = energyScale)
                             .background(
                                 Brush.radialGradient(
-                                    colors = listOf(Color(0xFFBB86FC).copy(alpha = 0.3f), Color.Transparent)
+                                    colors = listOf(Color(0xFFFFD700).copy(alpha = 0.3f), Color.Transparent)
                                 ),
                                 CircleShape
                             )
@@ -543,7 +580,7 @@ fun RankPromotionAnimation(
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 4.sp,
-                        shadow = Shadow(Color(0xFFBB86FC), blurRadius = 15f)
+                        shadow = Shadow(Color(0xFFFFD700), blurRadius = 15f)
                     )
                 )
             }
@@ -552,7 +589,7 @@ fun RankPromotionAnimation(
                 Spacer(modifier = Modifier.height(64.dp))
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
@@ -565,7 +602,7 @@ fun RankPromotionAnimation(
 
 @Composable
 fun RankEmblem(rank: String, modifier: Modifier = Modifier, isNew: Boolean = false) {
-    val glowColor = if (isNew) Color(0xFFBB86FC) else Color.Gray
+    val glowColor = if (isNew) Color(0xFFFFD700) else Color.Gray
     val emblemText = rank.first().toString()
     
     Box(
@@ -577,7 +614,7 @@ fun RankEmblem(rank: String, modifier: Modifier = Modifier, isNew: Boolean = fal
                 ),
                 CircleShape
             )
-            .border(2.dp, if (isNew) Color(0xFFBB86FC) else Color.DarkGray, CircleShape),
+            .border(2.dp, if (isNew) Color(0xFFFFD700) else Color.DarkGray, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -586,7 +623,7 @@ fun RankEmblem(rank: String, modifier: Modifier = Modifier, isNew: Boolean = fal
             style = TextStyle(
                 fontSize = 80.sp,
                 fontWeight = FontWeight.Black,
-                shadow = if (isNew) Shadow(Color(0xFFBB86FC), blurRadius = 20f) else null
+                shadow = if (isNew) Shadow(Color(0xFFFFD700), blurRadius = 20f) else null
             )
         )
     }
@@ -630,12 +667,12 @@ fun LevelUpAnimation(oldLevel: Int, newLevel: Int, onDismiss: () -> Unit) {
     ) {
         Text(
             "LEVEL UP",
-            color = Color(0xFFBB86FC),
+            color = Color(0xFFFFD700),
             style = TextStyle(
                 fontSize = 42.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 8.sp,
-                shadow = Shadow(Color(0xFFBB86FC), blurRadius = 25f)
+                shadow = Shadow(Color(0xFFFFD700), blurRadius = 25f)
             )
         )
         
@@ -652,7 +689,7 @@ fun LevelUpAnimation(oldLevel: Int, newLevel: Int, onDismiss: () -> Unit) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = Color(0xFFBB86FC),
+                tint = Color(0xFFFFD700),
                 modifier = Modifier.padding(horizontal = 24.dp).size(48.dp)
             )
 
@@ -669,7 +706,7 @@ fun LevelUpAnimation(oldLevel: Int, newLevel: Int, onDismiss: () -> Unit) {
                         color = Color.White,
                         fontSize = 84.sp,
                         fontWeight = FontWeight.Black,
-                        style = TextStyle(shadow = Shadow(Color(0xFFBB86FC), blurRadius = 30f))
+                        style = TextStyle(shadow = Shadow(Color(0xFFFFD700), blurRadius = 30f))
                     )
                 } else {
                     Box(modifier = Modifier.size(84.dp))
@@ -1097,7 +1134,7 @@ fun FloatingXpAnimation(
 
     Text(
         text = if (event.isBonus) "BONUS +${event.amount} XP" else "+${event.amount} XP",
-        color = if (event.isBonus) Color(0xFFFFD700) else Color(0xFFBB86FC),
+        color = Color(0xFFFFD700),
         fontWeight = FontWeight.Black,
         modifier = Modifier
             .offset { IntOffset(0, offsetY.value.toInt()) }
@@ -1245,7 +1282,8 @@ fun UserHeader(user: User) {
             Text(
                 text = user.rank,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFFBB86FC)
+                color = Color(0xFFFFD700),
+                fontWeight = FontWeight.Bold
             )
             if (user.activeTitle != null) {
                 Text(
@@ -1263,14 +1301,16 @@ fun UserHeader(user: User) {
         
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
-                color = Color(0xFF3700B3),
-                shape = RoundedCornerShape(16.dp)
+                color = Color(0xFF1A1A1A),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f))
             ) {
                 Text(
                     text = "🔥 ${user.streak}",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    color = Color(0xFFFFD700),
+                    fontWeight = FontWeight.Bold,
+                    style = TextStyle(shadow = Shadow(Color(0xFFFFD700).copy(alpha = 0.3f), blurRadius = 8f))
                 )
             }
         }
@@ -1318,11 +1358,11 @@ fun XpProgressBar(user: User) {
                     .fillMaxHeight()
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(Color(0xFF6200EE), Color(0xFFBB86FC))
+                            colors = listOf(Color(0xFFFFC107), Color(0xFFFFD700))
                         ),
                         RoundedCornerShape(6.dp)
                     )
-                    .shadow(8.dp, RoundedCornerShape(6.dp), spotColor = Color(0xFFBB86FC))
+                    .shadow(12.dp, RoundedCornerShape(6.dp), spotColor = Color(0xFFFFD700))
             )
         }
     }
@@ -1340,7 +1380,7 @@ fun QuestItem(quest: DailyQuest, onComplete: () -> Unit) {
     ) {
         Row(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -1354,7 +1394,7 @@ fun QuestItem(quest: DailyQuest, onComplete: () -> Unit) {
                 )
                 Text(
                     text = quest.goal,
-                    color = if (quest.isCompleted) Color.Gray.copy(alpha = 0.5f) else Color(0xFFBB86FC),
+                    color = if (quest.isCompleted) Color.Gray.copy(alpha = 0.5f) else Color(0xFFFFD700),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1364,15 +1404,15 @@ fun QuestItem(quest: DailyQuest, onComplete: () -> Unit) {
                 Icon(
                     Icons.Default.CheckCircle,
                     contentDescription = "Completed",
-                    tint = Color(0xFF03DAC6),
+                    tint = Color(0xFF4CAF50),
                     modifier = Modifier.size(32.dp)
                 )
             } else {
                 Button(
                     onClick = onComplete,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                     shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     Text("+${quest.xpReward} XP", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 12.sp)
                 }

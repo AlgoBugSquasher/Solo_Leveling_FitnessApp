@@ -37,7 +37,6 @@ fun HunterProfileScreen(
     viewModel: HomeViewModel,
     onViewStatistics: () -> Unit,
     onViewHistory: () -> Unit,
-    onViewAbilities: () -> Unit,
     onViewSettings: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -215,25 +214,6 @@ fun HunterProfileScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text("HUNTER JOURNEY", fontWeight = FontWeight.Bold, color = Color(0xFF03DAC6))
-                                }
-                            }
-                        }
-
-                        AnimatedButton(
-                            onClick = {
-                                soundManager.playClick()
-                                onViewAbilities()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                border = BorderStroke(1.dp, Color(0xFFBB86FC)),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.Transparent
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("VIEW ABILITIES", fontWeight = FontWeight.Bold, color = Color(0xFFBB86FC))
                                 }
                             }
                         }

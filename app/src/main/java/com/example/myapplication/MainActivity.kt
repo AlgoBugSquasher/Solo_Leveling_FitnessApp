@@ -6,14 +6,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.myapplication.data.AppDatabase
 import com.example.myapplication.data.FitnessRepository
-import com.example.myapplication.ui.screens.*
 import com.example.myapplication.viewmodel.*
+import com.example.myapplication.ui.screens.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -23,8 +25,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Link hardware volume buttons to the media stream
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
+        
         val database = AppDatabase.getDatabase(this)
-        val repository = FitnessRepository(database.userDao(), database.abilityDao(), database.workoutDao(), database.titleDao(), database.trainingPlanDao())
+        val repository = FitnessRepository(database.userDao(), database.abilityDao(), database.workoutDao(), database.titleDao(), database.trainingPlanDao(), database.journeyEventDao(), database.dailyQuestDao())
         
         @Suppress("UNCHECKED_CAST")
         val viewModelFactory = object : ViewModelProvider.Factory {
@@ -40,6 +45,7 @@ class MainActivity : ComponentActivity() {
                     modelClass.isAssignableFrom(AchievementViewModel::class.java) -> AchievementViewModel(repository) as T
                     modelClass.isAssignableFrom(ArchiveHubViewModel::class.java) -> ArchiveHubViewModel(repository) as T
                     modelClass.isAssignableFrom(TrainingPlanViewModel::class.java) -> TrainingPlanViewModel(repository) as T
+                    modelClass.isAssignableFrom(JourneyViewModel::class.java) -> JourneyViewModel(repository) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }
@@ -49,6 +55,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 val navController = rememberNavController()
+                val homeViewModel = ViewModelProvider(this, viewModelFactory)[HomeViewModel::class.java]
+                val userState = homeViewModel.user.collectAsState()
+
+                // Sync SoundManager with user settings globally
+                LaunchedEffect(userState.value.soundEnabled) {
+                    com.example.myapplication.util.SoundManager.getInstance(this@MainActivity)
+                        .setEnabled(userState.value.soundEnabled)
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -56,7 +70,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavHost(navController = navController, startDestination = "home") {
                         composable("home") {
-                            val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
                             val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
                             HomeScreen(
                                 viewModel = homeViewModel,
@@ -90,7 +103,6 @@ class MainActivity : ComponentActivity() {
                                 viewModel = homeViewModel,
                                 onViewStatistics = { navController.navigate("statistics") },
                                 onViewHistory = { navController.navigate("history") },
-                                onViewAbilities = { navController.navigate("abilities") },
                                 onViewSettings = { navController.navigate("settings") },
                                 onNavigateBack = { navController.popBackStack() }
                             )
@@ -122,17 +134,8 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("workout") {
                             val workoutViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[WorkoutViewModel::class.java]
-                            val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
                             WorkoutScreen(
                                 viewModel = workoutViewModel,
-                                trainingViewModel = trainingViewModel,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
-                        }
-                        composable("abilities") {
-                            val abilityViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AbilityViewModel::class.java]
-                            AbilityScreen(
-                                viewModel = abilityViewModel,
                                 onNavigateBack = { navController.popBackStack() }
                             )
                         }
@@ -151,9 +154,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("history") {
-                            val historyViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[WorkoutHistoryViewModel::class.java]
-                            WorkoutHistoryScreen(
-                                viewModel = historyViewModel,
+                            val journeyViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[JourneyViewModel::class.java]
+                            HunterJourneyScreen(
+                                viewModel = journeyViewModel,
                                 onNavigateBack = { navController.popBackStack() }
                             )
                         }

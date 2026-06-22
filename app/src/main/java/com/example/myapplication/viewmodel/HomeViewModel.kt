@@ -16,29 +16,14 @@ import com.example.myapplication.model.ExerciseEntity
 import com.example.myapplication.model.WorkoutEntity
 import com.example.myapplication.util.RankCalculator
 import com.example.myapplication.util.XpCalculator
+import java.util.Calendar
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Events for the UI to handle, such as showing animations or dialogs.
- */
-sealed class UiEvent {
-    data class LevelUp(val oldLevel: Int, val newLevel: Int) : UiEvent()
-    data class AbilityUnlocked(val ability: Ability) : UiEvent()
-    data class TitleUnlocked(val title: Title) : UiEvent()
-    data class BadgeUnlocked(val badge: Badge) : UiEvent()
-    data class AchievementUnlocked(val achievement: Achievement) : UiEvent()
-    data class NewPersonalRecord(val recordName: String, val oldValue: Int, val newValue: Int) : UiEvent()
-    data class RankPromotion(val oldRank: String, val newRank: String) : UiEvent()
-    data class BackupSuccess(val message: String) : UiEvent()
-    data class BackupError(val message: String) : UiEvent()
-}
-
-/**
  * ViewModel for the Home Screen.
- * Handles user progress, XP calculation, and daily quest management.
  */
 class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
 
@@ -69,11 +54,19 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
                 // Monitor for achievement unlocks
                 val previousUser = lastSeenUser
                 if (previousUser != null) {
+                    // Monitor for level ups
+                    if (it.level > previousUser.level) {
+                        _uiEvent.emit(UiEvent.LevelUp(previousUser.level, it.level))
+                    }
+
                     AchievementData.allAchievements.forEach { achievement ->
                         val wasLocked = !achievement.isUnlocked(previousUser)
                         val isUnlocked = achievement.isUnlocked(it)
                         if (wasLocked && isUnlocked) {
                             _uiEvent.emit(UiEvent.AchievementUnlocked(achievement))
+                            viewModelScope.launch {
+                                repository.recordJourneyEvent("ACHIEVEMENT_UNLOCKED", "ACHIEVEMENT UNLOCKED", achievement.name, "🏆")
+                            }
                         }
                     }
 
@@ -86,9 +79,6 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
                     }
                     if (it.maxPlankSingleWorkout > previousUser.maxPlankSingleWorkout) {
                         _uiEvent.emit(UiEvent.NewPersonalRecord("Longest Plank", previousUser.maxPlankSingleWorkout, it.maxPlankSingleWorkout))
-                    }
-                    if (it.maxXpSingleWorkout > previousUser.maxXpSingleWorkout) {
-                        _uiEvent.emit(UiEvent.NewPersonalRecord("Highest Workout XP", previousUser.maxXpSingleWorkout, it.maxXpSingleWorkout))
                     }
 
                     // Monitor for rank promotions
@@ -104,6 +94,7 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
 
     init {
         seedTitles()
+        checkAndRefreshQuests()
     }
 
     private fun seedTitles() {
@@ -115,14 +106,36 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
         }
     }
 
-    private val _dailyQuests = MutableStateFlow(
-        listOf(
-            DailyQuest.createQuest(1, "Push-ups", 20, 50),
-            DailyQuest.createQuest(2, "Pull-ups", 10, 75),
-            DailyQuest.createQuest(3, "Plank", 60, 40)
-        )
-    )
-    val dailyQuests: StateFlow<List<DailyQuest>> = _dailyQuests.asStateFlow()
+    private fun checkAndRefreshQuests() {
+        viewModelScope.launch {
+            val currentUser = repository.user.filterNotNull().first()
+            val now = System.currentTimeMillis()
+            
+            if (shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)) {
+                val newQuests = listOf(
+                    DailyQuest.createQuest(1, "Push-ups", 20, 50),
+                    DailyQuest.createQuest(2, "Pull-ups", 10, 75),
+                    DailyQuest.createQuest(3, "Plank", 60, 40)
+                )
+                repository.clearDailyQuests()
+                repository.insertDailyQuests(newQuests)
+                repository.updateUser(currentUser.copy(lastQuestRefreshDate = now))
+            }
+        }
+    }
+
+    private fun shouldRefreshQuests(lastRefresh: Long, now: Long): Boolean {
+        if (lastRefresh == 0L) return true
+        
+        val last = Calendar.getInstance().apply { timeInMillis = lastRefresh }
+        val current = Calendar.getInstance().apply { timeInMillis = now }
+        
+        return last.get(Calendar.YEAR) != current.get(Calendar.YEAR) ||
+               last.get(Calendar.DAY_OF_YEAR) != current.get(Calendar.DAY_OF_YEAR)
+    }
+
+    val dailyQuests: StateFlow<List<DailyQuest>> = repository.allDailyQuests
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun toggleSound() {
         viewModelScope.launch {
@@ -132,18 +145,36 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
     }
 
     fun completeQuest(questId: Int) {
-        val currentQuests = _dailyQuests.value
-        val quest = currentQuests.find { it.id == questId }
-        if (quest != null && !quest.isCompleted) {
-            val updatedQuests = currentQuests.map {
-                if (it.id == questId) it.copy(isCompleted = true) else it
-            }
-            _dailyQuests.value = updatedQuests
-            addXP(quest.xpReward)
-            
-            // Check if all completed for bonus
-            if (updatedQuests.all { it.isCompleted }) {
-                addXP(100) // Bonus XP
+        viewModelScope.launch {
+            val currentQuests = dailyQuests.value
+            val quest = currentQuests.find { it.id == questId }
+            if (quest != null && !quest.isCompleted) {
+                val updatedQuest = quest.copy(isCompleted = true)
+                repository.updateDailyQuest(updatedQuest)
+                
+                val sets = quest.sets ?: 1
+                val reps = quest.reps ?: 0
+                val addedPushups = if (quest.title.contains("Push-up", ignoreCase = true)) reps * sets else 0
+                val addedPullups = if (quest.title.contains("Pull-up", ignoreCase = true)) reps * sets else 0
+                val addedPlank = if (quest.title.contains("Plank", ignoreCase = true)) quest.goal.filter { it.isDigit() }.toIntOrNull() ?: 0 else 0
+
+                val isFirstQuest = repository.getEventCountByType("FIRST_QUEST") == 0
+                if (isFirstQuest) {
+                    repository.recordJourneyEvent("FIRST_QUEST", "FIRST QUEST COMPLETED", "Your first mission is a success.", "📜")
+                }
+
+                repository.recordProgress(
+                    pushups = addedPushups,
+                    pullups = addedPullups,
+                    plankSeconds = addedPlank,
+                    xpGained = quest.xpReward
+                )
+                
+                // Check if all completed for bonus
+                val allQuestsAfterUpdate = repository.allDailyQuests.first()
+                if (allQuestsAfterUpdate.all { it.isCompleted }) {
+                    repository.recordProgress(xpGained = 100) // Bonus XP
+                }
             }
         }
     }
@@ -330,52 +361,6 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
             } catch (e: Exception) {
                 _uiEvent.emit(UiEvent.BackupError("Restore failed: ${e.message}"))
             }
-        }
-    }
-
-    /**
-     * Logic to add XP and handle leveling up.
-     * Level thresholds increase as the user levels up.
-     */
-    private fun addXP(amount: Int) {
-        viewModelScope.launch {
-            val currentUser = user.value
-            val previousLevel = currentUser.level
-            var newXp = currentUser.xp + amount
-            var newLevel = previousLevel
-
-            while (newXp >= XpCalculator.calculateRequiredXP(newLevel)) {
-                newXp -= XpCalculator.calculateRequiredXP(newLevel)
-                newLevel++
-            }
-
-            // Detect level up and badge unlocks
-            if (newLevel > previousLevel) {
-                // 1. Emit Level Up Event first
-                _uiEvent.emit(UiEvent.LevelUp(previousLevel, newLevel))
-
-                // 2. Emit Badge Unlocks
-                badgeMilestones.forEach { milestone ->
-                    if (milestone in (previousLevel + 1)..newLevel) {
-                        val unlockedBadge = BadgeData.allBadges.find { it.requiredLevel == milestone }
-                        unlockedBadge?.let {
-                            _uiEvent.emit(UiEvent.BadgeUnlocked(it))
-                        }
-                    }
-                }
-            }
-
-            val newRank = RankCalculator.calculateRank(newLevel)
-            val isRankPromotion = RankCalculator.isPromotion(currentUser.rank, newRank)
-
-            repository.updateUser(currentUser.copy(
-                xp = newXp,
-                level = newLevel,
-                rank = newRank,
-                totalXpEarned = currentUser.totalXpEarned + amount,
-                totalPromotions = if (isRankPromotion) currentUser.totalPromotions + 1 else currentUser.totalPromotions,
-                highestRank = RankCalculator.getHighestRank(currentUser.highestRank, newRank)
-            ))
         }
     }
 }
