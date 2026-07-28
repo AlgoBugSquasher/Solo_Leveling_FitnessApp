@@ -3,10 +3,6 @@ package com.example.myapplication.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-enum class ExerciseTrackingType {
-    REPS, SECONDS, DISTANCE
-}
-
 @Entity(tableName = "planned_exercise_table")
 data class PlannedExercise(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

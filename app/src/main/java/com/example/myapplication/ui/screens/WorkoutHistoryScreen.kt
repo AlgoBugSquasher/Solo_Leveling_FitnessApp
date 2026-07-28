@@ -94,16 +94,16 @@ fun WorkoutHistoryItem(workout: WorkoutWithExercises) {
             Spacer(modifier = Modifier.height(8.dp))
             
             workout.exercises.forEach { ex ->
-                val detail = when {
-                    ex.duration != null -> "${ex.duration}s"
-                    ex.reps != null -> "${ex.reps}r"
-                    else -> ""
+                val detail = when (ex.trackingType) {
+                    com.example.myapplication.model.ExerciseTrackingType.REPS -> "${ex.sets}x ${ex.reps}r"
+                    com.example.myapplication.model.ExerciseTrackingType.SECONDS -> "${ex.sets}x ${ex.duration}s"
+                    com.example.myapplication.model.ExerciseTrackingType.DISTANCE -> "${ex.distanceKm} km"
                 }
                 Text(
-                    text = "${ex.name}: ${ex.sets}x $detail",
+                    text = "${ex.name.uppercase()}: $detail",
                     color = Color.White,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold
                 )
             }
         }

@@ -56,11 +56,11 @@ public class AppDatabase_Impl : AppDatabase() {
   }
 
   protected override fun createOpenDelegate(): RoomOpenDelegate {
-    val _openDelegate: RoomOpenDelegate = object : RoomOpenDelegate(18, "29fa8dae26de78c2562cbb7526406a9f", "d445f6d0b75ac8e3b9b7673a7d900d6c") {
+    val _openDelegate: RoomOpenDelegate = object : RoomOpenDelegate(18, "cc54b3527b32e65183540732e6839af9", "48d3b59b85f5cbdf9b7a8c3100e635fb") {
       public override fun createAllTables(connection: SQLiteConnection) {
         connection.execSQL("CREATE TABLE IF NOT EXISTS `user_table` (`id` INTEGER NOT NULL, `xp` INTEGER NOT NULL, `level` INTEGER NOT NULL, `streak` INTEGER NOT NULL, `rank` TEXT NOT NULL, `pushups` INTEGER NOT NULL, `pullups` INTEGER NOT NULL, `plankTime` INTEGER NOT NULL, `totalDistanceKm` REAL NOT NULL, `totalPikePushups` INTEGER NOT NULL, `totalPseudoPlanchePushups` INTEGER NOT NULL, `totalHangingSeconds` INTEGER NOT NULL, `totalExplosivePullups` INTEGER NOT NULL, `totalXpEarned` INTEGER NOT NULL, `totalWorkouts` INTEGER NOT NULL, `highestStreak` INTEGER NOT NULL, `totalPromotions` INTEGER NOT NULL, `highestRank` TEXT NOT NULL, `lastWorkoutDate` INTEGER NOT NULL, `lastQuestRefreshDate` INTEGER NOT NULL, `activeTitle` TEXT, `soundEnabled` INTEGER NOT NULL, `maxPushupsSingleWorkout` INTEGER NOT NULL, `maxPullupsSingleWorkout` INTEGER NOT NULL, `maxPlankSingleWorkout` INTEGER NOT NULL, `maxXpSingleWorkout` INTEGER NOT NULL, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `workout_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` INTEGER NOT NULL, `totalXpGained` INTEGER NOT NULL)")
-        connection.execSQL("CREATE TABLE IF NOT EXISTS `exercise_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workoutId` INTEGER NOT NULL, `name` TEXT NOT NULL, `reps` INTEGER, `sets` INTEGER NOT NULL, `duration` INTEGER, FOREIGN KEY(`workoutId`) REFERENCES `workout_table`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
+        connection.execSQL("CREATE TABLE IF NOT EXISTS `exercise_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workoutId` INTEGER NOT NULL, `name` TEXT NOT NULL, `category` TEXT NOT NULL, `trackingType` TEXT NOT NULL, `reps` INTEGER, `sets` INTEGER NOT NULL, `duration` INTEGER, `distanceKm` REAL, FOREIGN KEY(`workoutId`) REFERENCES `workout_table`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `ability_table` (`name` TEXT NOT NULL, `isUnlocked` INTEGER NOT NULL, `requiredPushups` INTEGER NOT NULL, `requiredPullups` INTEGER NOT NULL, `requiredPlankTime` INTEGER NOT NULL, `requiredLevel` INTEGER NOT NULL, `requiredStreak` INTEGER NOT NULL, PRIMARY KEY(`name`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `title_table` (`name` TEXT NOT NULL, `requiredStreak` INTEGER NOT NULL, `isUnlocked` INTEGER NOT NULL, PRIMARY KEY(`name`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `training_plan_table` (`dayOfWeek` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `lastCompletedWeek` INTEGER NOT NULL, `lastCompletedYear` INTEGER NOT NULL, `lastRewardWeek` INTEGER NOT NULL, `lastRewardYear` INTEGER NOT NULL, PRIMARY KEY(`dayOfWeek`))")
@@ -69,7 +69,7 @@ public class AppDatabase_Impl : AppDatabase() {
         connection.execSQL("CREATE TABLE IF NOT EXISTS `journey_event_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `type` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `icon` TEXT NOT NULL)")
         connection.execSQL("CREATE TABLE IF NOT EXISTS `daily_quest_table` (`id` INTEGER NOT NULL, `title` TEXT NOT NULL, `goal` TEXT NOT NULL, `xpReward` INTEGER NOT NULL, `isCompleted` INTEGER NOT NULL, `sets` INTEGER, `reps` INTEGER, PRIMARY KEY(`id`))")
         connection.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)")
-        connection.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '29fa8dae26de78c2562cbb7526406a9f')")
+        connection.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cc54b3527b32e65183540732e6839af9')")
       }
 
       public override fun dropAllTables(connection: SQLiteConnection) {
@@ -162,9 +162,12 @@ public class AppDatabase_Impl : AppDatabase() {
         _columnsExerciseTable.put("id", TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsExerciseTable.put("workoutId", TableInfo.Column("workoutId", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsExerciseTable.put("name", TableInfo.Column("name", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsExerciseTable.put("category", TableInfo.Column("category", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsExerciseTable.put("trackingType", TableInfo.Column("trackingType", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsExerciseTable.put("reps", TableInfo.Column("reps", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsExerciseTable.put("sets", TableInfo.Column("sets", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY))
         _columnsExerciseTable.put("duration", TableInfo.Column("duration", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
+        _columnsExerciseTable.put("distanceKm", TableInfo.Column("distanceKm", "REAL", false, 0, null, TableInfo.CREATED_FROM_ENTITY))
         val _foreignKeysExerciseTable: MutableSet<TableInfo.ForeignKey> = mutableSetOf()
         _foreignKeysExerciseTable.add(TableInfo.ForeignKey("workout_table", "CASCADE", "NO ACTION", listOf("workoutId"), listOf("id")))
         val _indicesExerciseTable: MutableSet<TableInfo.Index> = mutableSetOf()

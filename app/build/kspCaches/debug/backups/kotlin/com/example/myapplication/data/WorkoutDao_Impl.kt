@@ -12,10 +12,14 @@ import androidx.room.util.performSuspending
 import androidx.room.util.recursiveFetchLongSparseArray
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
+import com.example.myapplication.model.ExerciseCategory
 import com.example.myapplication.model.ExerciseEntity
+import com.example.myapplication.model.ExerciseTrackingType
 import com.example.myapplication.model.WorkoutEntity
 import com.example.myapplication.model.WorkoutWithExercises
 import javax.`annotation`.processing.Generated
+import kotlin.Double
+import kotlin.IllegalArgumentException
 import kotlin.Int
 import kotlin.Long
 import kotlin.String
@@ -50,24 +54,32 @@ public class WorkoutDao_Impl(
       }
     }
     this.__insertAdapterOfExerciseEntity = object : EntityInsertAdapter<ExerciseEntity>() {
-      protected override fun createQuery(): String = "INSERT OR REPLACE INTO `exercise_table` (`id`,`workoutId`,`name`,`reps`,`sets`,`duration`) VALUES (nullif(?, 0),?,?,?,?,?)"
+      protected override fun createQuery(): String = "INSERT OR REPLACE INTO `exercise_table` (`id`,`workoutId`,`name`,`category`,`trackingType`,`reps`,`sets`,`duration`,`distanceKm`) VALUES (nullif(?, 0),?,?,?,?,?,?,?,?)"
 
       protected override fun bind(statement: SQLiteStatement, entity: ExerciseEntity) {
         statement.bindLong(1, entity.id.toLong())
         statement.bindLong(2, entity.workoutId.toLong())
         statement.bindText(3, entity.name)
+        statement.bindText(4, __ExerciseCategory_enumToString(entity.category))
+        statement.bindText(5, __ExerciseTrackingType_enumToString(entity.trackingType))
         val _tmpReps: Int? = entity.reps
         if (_tmpReps == null) {
-          statement.bindNull(4)
-        } else {
-          statement.bindLong(4, _tmpReps.toLong())
-        }
-        statement.bindLong(5, entity.sets.toLong())
-        val _tmpDuration: Int? = entity.duration
-        if (_tmpDuration == null) {
           statement.bindNull(6)
         } else {
-          statement.bindLong(6, _tmpDuration.toLong())
+          statement.bindLong(6, _tmpReps.toLong())
+        }
+        statement.bindLong(7, entity.sets.toLong())
+        val _tmpDuration: Int? = entity.duration
+        if (_tmpDuration == null) {
+          statement.bindNull(8)
+        } else {
+          statement.bindLong(8, _tmpDuration.toLong())
+        }
+        val _tmpDistanceKm: Double? = entity.distanceKm
+        if (_tmpDistanceKm == null) {
+          statement.bindNull(9)
+        } else {
+          statement.bindDouble(9, _tmpDistanceKm)
         }
       }
     }
@@ -129,6 +141,36 @@ public class WorkoutDao_Impl(
     }
   }
 
+  private fun __ExerciseCategory_enumToString(_value: ExerciseCategory): String = when (_value) {
+    ExerciseCategory.PUSHUPS -> "PUSHUPS"
+    ExerciseCategory.PULLUPS -> "PULLUPS"
+    ExerciseCategory.PLANK -> "PLANK"
+    ExerciseCategory.CARDIO -> "CARDIO"
+    ExerciseCategory.OTHER -> "OTHER"
+  }
+
+  private fun __ExerciseTrackingType_enumToString(_value: ExerciseTrackingType): String = when (_value) {
+    ExerciseTrackingType.REPS -> "REPS"
+    ExerciseTrackingType.SECONDS -> "SECONDS"
+    ExerciseTrackingType.DISTANCE -> "DISTANCE"
+  }
+
+  private fun __ExerciseCategory_stringToEnum(_value: String): ExerciseCategory = when (_value) {
+    "PUSHUPS" -> ExerciseCategory.PUSHUPS
+    "PULLUPS" -> ExerciseCategory.PULLUPS
+    "PLANK" -> ExerciseCategory.PLANK
+    "CARDIO" -> ExerciseCategory.CARDIO
+    "OTHER" -> ExerciseCategory.OTHER
+    else -> throw IllegalArgumentException("Can't convert value to enum, unknown value: " + _value)
+  }
+
+  private fun __ExerciseTrackingType_stringToEnum(_value: String): ExerciseTrackingType = when (_value) {
+    "REPS" -> ExerciseTrackingType.REPS
+    "SECONDS" -> ExerciseTrackingType.SECONDS
+    "DISTANCE" -> ExerciseTrackingType.DISTANCE
+    else -> throw IllegalArgumentException("Can't convert value to enum, unknown value: " + _value)
+  }
+
   private fun __fetchRelationshipexerciseTableAscomExampleMyapplicationModelExerciseEntity(_connection: SQLiteConnection, _map: LongSparseArray<MutableList<ExerciseEntity>>) {
     if (_map.isEmpty()) {
       return
@@ -140,7 +182,7 @@ public class WorkoutDao_Impl(
       return
     }
     val _stringBuilder: StringBuilder = StringBuilder()
-    _stringBuilder.append("SELECT `id`,`workoutId`,`name`,`reps`,`sets`,`duration` FROM `exercise_table` WHERE `workoutId` IN (")
+    _stringBuilder.append("SELECT `id`,`workoutId`,`name`,`category`,`trackingType`,`reps`,`sets`,`duration`,`distanceKm` FROM `exercise_table` WHERE `workoutId` IN (")
     val _inputSize: Int = _map.size()
     appendPlaceholders(_stringBuilder, _inputSize)
     _stringBuilder.append(")")
@@ -160,9 +202,12 @@ public class WorkoutDao_Impl(
       val _columnIndexOfId: Int = 0
       val _columnIndexOfWorkoutId: Int = 1
       val _columnIndexOfName: Int = 2
-      val _columnIndexOfReps: Int = 3
-      val _columnIndexOfSets: Int = 4
-      val _columnIndexOfDuration: Int = 5
+      val _columnIndexOfCategory: Int = 3
+      val _columnIndexOfTrackingType: Int = 4
+      val _columnIndexOfReps: Int = 5
+      val _columnIndexOfSets: Int = 6
+      val _columnIndexOfDuration: Int = 7
+      val _columnIndexOfDistanceKm: Int = 8
       while (_stmt.step()) {
         val _tmpKey: Long
         _tmpKey = _stmt.getLong(_itemKeyIndex)
@@ -175,6 +220,10 @@ public class WorkoutDao_Impl(
           _tmpWorkoutId = _stmt.getLong(_columnIndexOfWorkoutId).toInt()
           val _tmpName: String
           _tmpName = _stmt.getText(_columnIndexOfName)
+          val _tmpCategory: ExerciseCategory
+          _tmpCategory = __ExerciseCategory_stringToEnum(_stmt.getText(_columnIndexOfCategory))
+          val _tmpTrackingType: ExerciseTrackingType
+          _tmpTrackingType = __ExerciseTrackingType_stringToEnum(_stmt.getText(_columnIndexOfTrackingType))
           val _tmpReps: Int?
           if (_stmt.isNull(_columnIndexOfReps)) {
             _tmpReps = null
@@ -189,7 +238,13 @@ public class WorkoutDao_Impl(
           } else {
             _tmpDuration = _stmt.getLong(_columnIndexOfDuration).toInt()
           }
-          _item_1 = ExerciseEntity(_tmpId,_tmpWorkoutId,_tmpName,_tmpReps,_tmpSets,_tmpDuration)
+          val _tmpDistanceKm: Double?
+          if (_stmt.isNull(_columnIndexOfDistanceKm)) {
+            _tmpDistanceKm = null
+          } else {
+            _tmpDistanceKm = _stmt.getDouble(_columnIndexOfDistanceKm)
+          }
+          _item_1 = ExerciseEntity(_tmpId,_tmpWorkoutId,_tmpName,_tmpCategory,_tmpTrackingType,_tmpReps,_tmpSets,_tmpDuration,_tmpDistanceKm)
           _tmpRelation.add(_item_1)
         }
       }

@@ -6,8 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
@@ -58,6 +57,17 @@ class MainActivity : ComponentActivity() {
                 val homeViewModel = ViewModelProvider(this, viewModelFactory)[HomeViewModel::class.java]
                 val userState = homeViewModel.user.collectAsState()
 
+                // Navigation Debouncing to prevent rapid click bugs (e.g. double-back to blank screen)
+                var lastNavTime by remember { mutableLongStateOf(0L) }
+                val navDebounce = 500L
+                fun safeNav(action: () -> Unit) {
+                    val now = System.currentTimeMillis()
+                    if ((now - lastNavTime) > navDebounce) {
+                        action()
+                        lastNavTime = now
+                    }
+                }
+
                 // Sync SoundManager with user settings globally
                 LaunchedEffect(userState.value.soundEnabled) {
                     com.example.myapplication.util.SoundManager.getInstance(this@MainActivity)
@@ -74,90 +84,90 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 viewModel = homeViewModel,
                                 trainingViewModel = trainingViewModel,
-                                onStartWorkout = { navController.navigate("workout") },
-                                onViewArchiveHub = { navController.navigate("archive_hub") },
-                                onViewProfileHub = { navController.navigate("profile_hub") },
-                                onOpenTrainingPlan = { navController.navigate("training_plan") }
+                                onStartWorkout = { safeNav { navController.navigate("workout") } },
+                                onViewArchiveHub = { safeNav { navController.navigate("archive_hub") } },
+                                onViewProfileHub = { safeNav { navController.navigate("profile_hub") } },
+                                onOpenTrainingPlan = { safeNav { navController.navigate("training_plan") } }
                             )
                         }
                         composable("training_plan") {
                             val trainingViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TrainingPlanViewModel::class.java]
                             TrainingPlanScreen(
                                 viewModel = trainingViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("archive_hub") {
                             val archiveHubViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[ArchiveHubViewModel::class.java]
                             ArchiveHubScreen(
                                 viewModel = archiveHubViewModel,
-                                onViewArchive = { navController.navigate("archive") },
-                                onViewAchievements = { navController.navigate("achievements") },
-                                onViewTitles = { navController.navigate("titles") },
-                                onNavigateBack = { navController.popBackStack() }
+                                onViewArchive = { safeNav { navController.navigate("archive") } },
+                                onViewAchievements = { safeNav { navController.navigate("achievements") } },
+                                onViewTitles = { safeNav { navController.navigate("titles") } },
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("profile_hub") {
                             val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
                             HunterProfileScreen(
                                 viewModel = homeViewModel,
-                                onViewStatistics = { navController.navigate("statistics") },
-                                onViewHistory = { navController.navigate("history") },
-                                onViewSettings = { navController.navigate("settings") },
-                                onNavigateBack = { navController.popBackStack() }
+                                onViewStatistics = { safeNav { navController.navigate("statistics") } },
+                                onViewHistory = { safeNav { navController.navigate("history") } },
+                                onViewSettings = { safeNav { navController.navigate("settings") } },
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("settings") {
                             val homeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
                             SettingsScreen(
                                 viewModel = homeViewModel,
-                                onViewAbout = { navController.navigate("about") },
-                                onNavigateBack = { navController.popBackStack() }
+                                onViewAbout = { safeNav { navController.navigate("about") } },
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("about") {
-                            AboutScreen(onNavigateBack = { navController.popBackStack() })
+                            AboutScreen(onNavigateBack = { safeNav { navController.popBackStack() } })
                         }
                         composable("achievements") {
                             val achievementViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AchievementViewModel::class.java]
                             AchievementArchiveScreen(
                                 viewModel = achievementViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("titles") {
                             val titleViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[TitleViewModel::class.java]
                             TitleArchiveScreen(
                                 viewModel = titleViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("workout") {
                             val workoutViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[WorkoutViewModel::class.java]
                             WorkoutScreen(
                                 viewModel = workoutViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("archive") {
                             val badgeViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[BadgeViewModel::class.java]
                             HunterArchiveScreen(
                                 viewModel = badgeViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("statistics") {
                             val statsViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[StatisticsViewModel::class.java]
                             StatisticsScreen(
                                 viewModel = statsViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                         composable("history") {
                             val journeyViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[JourneyViewModel::class.java]
                             HunterJourneyScreen(
                                 viewModel = journeyViewModel,
-                                onNavigateBack = { navController.popBackStack() }
+                                onNavigateBack = { safeNav { navController.popBackStack() } }
                             )
                         }
                     }

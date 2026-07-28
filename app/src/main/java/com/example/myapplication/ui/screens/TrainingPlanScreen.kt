@@ -9,10 +9,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -33,11 +34,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.myapplication.model.ExerciseTrackingType
 import com.example.myapplication.model.PlannedExercise
 import com.example.myapplication.model.TrainingDay
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.TrainingPlanViewModel
+import com.example.myapplication.ui.components.ExerciseTimerDialog
+import com.example.myapplication.ui.components.ExerciseStopwatchDialog
 import kotlinx.coroutines.delay
 import java.util.*
 
@@ -52,45 +56,18 @@ fun TrainingPlanScreen(
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
     
-    val listState = rememberLazyListState()
-    var hasScrolledToToday by remember { mutableStateOf(false) }
-    var triggerHighlight by remember { mutableStateOf(false) }
+    // Navigation State: null means Weekly Program View, Int means Day Details View for that dayOfWeek
+    var selectedDayOfWeek by remember { mutableStateOf<Int?>(null) }
 
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
     )
 
-    // Automatic Scroll to Today
-    LaunchedEffect(plan) {
-        if (plan.isNotEmpty() && !hasScrolledToToday) {
-            val calendar = Calendar.getInstance()
-            val dayOfWeek = when (calendar.get(Calendar.DAY_OF_WEEK)) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 3
-                Calendar.THURSDAY -> 4
-                Calendar.FRIDAY -> 5
-                Calendar.SATURDAY -> 6
-                Calendar.SUNDAY -> 7
-                else -> 7
-            }
-            
-            // Monday is index 1, Tuesday index 2, etc. (Header is index 0)
-            val targetIndex = dayOfWeek
-            
-            delay(300) // Small delay for screen transition
-            listState.animateScrollToItem(targetIndex)
-            hasScrolledToToday = true
-            triggerHighlight = true
-            delay(2000)
-            triggerHighlight = false
-        }
-    }
-
     var showBonusPopup by remember { mutableStateOf(false) }
     var exerciseToEdit by remember { mutableStateOf<PlannedExercise?>(null) }
     var exerciseToDelete by remember { mutableStateOf<PlannedExercise?>(null) }
     var dayForNewExercise by remember { mutableStateOf<Int?>(null) }
+    var timerExercise by remember { mutableStateOf<PlannedExercise?>(null) }
 
     // Day Reward Animation State
     var dayRewardAnimation by remember { mutableStateOf<Int?>(null) }
@@ -110,7 +87,6 @@ fun TrainingPlanScreen(
             val wasAlreadyNoted = previousDayReward[day.dayOfWeek] == currentWeek && previousDayYear[day.dayOfWeek] == currentYear
             
             if (rewardClaimedThisWeek && !wasAlreadyNoted && !isInitialLoad) {
-                // Reward granted for the first time this week!
                 soundManager.playBadgeUnlock(com.example.myapplication.model.BadgeRarity.COMMON)
                 dayRewardAnimation = 200
             }
@@ -214,14 +190,60 @@ fun TrainingPlanScreen(
         )
     }
 
+    if (timerExercise != null) {
+        if (timerExercise!!.trackingType == ExerciseTrackingType.SECONDS) {
+            ExerciseTimerDialog(
+                exerciseName = timerExercise!!.name,
+                totalSets = timerExercise!!.sets ?: 1,
+                initialSeconds = timerExercise!!.seconds ?: 60,
+                soundManager = soundManager,
+                onDismiss = { 
+                    soundManager.playClick()
+                    timerExercise = null 
+                },
+                onComplete = {
+                    soundManager.playQuestComplete()
+                    viewModel.toggleExerciseCompletion(timerExercise!!)
+                    timerExercise = null
+                }
+            )
+        } else if (timerExercise!!.trackingType == ExerciseTrackingType.DISTANCE) {
+            ExerciseStopwatchDialog(
+                exerciseName = timerExercise!!.name,
+                targetDistance = timerExercise!!.distanceKm ?: 0.0,
+                soundManager = soundManager,
+                onDismiss = {
+                    soundManager.playClick()
+                    timerExercise = null
+                },
+                onFinish = { _ ->
+                    soundManager.playQuestComplete()
+                    viewModel.toggleExerciseCompletion(timerExercise!!)
+                    timerExercise = null
+                }
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Hunter Training Plan", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Text(
+                        if (selectedDayOfWeek == null) "Weekly Program" else getDayName(selectedDayOfWeek!!).uppercase(), 
+                        color = Color.White, 
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = {
                         soundManager.playClick()
-                        onNavigateBack()
+                        if (selectedDayOfWeek == null) {
+                            onNavigateBack()
+                        } else {
+                            selectedDayOfWeek = null
+                        }
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
@@ -237,56 +259,44 @@ fun TrainingPlanScreen(
                 .background(backgroundBrush)
                 .padding(padding)
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                item {
-                    WeeklyProgressHeader(plan, allExercises)
-                }
-
-                items(plan) { day ->
-                    val dayExercises = allExercises.filter { it.dayOfWeek == day.dayOfWeek }
-                    
-                    val calendar = Calendar.getInstance()
-                    val todayOfWeek = when (calendar.get(Calendar.DAY_OF_WEEK)) {
-                        Calendar.MONDAY -> 1
-                        Calendar.TUESDAY -> 2
-                        Calendar.WEDNESDAY -> 3
-                        Calendar.THURSDAY -> 4
-                        Calendar.FRIDAY -> 5
-                        Calendar.SATURDAY -> 6
-                        Calendar.SUNDAY -> 7
-                        else -> 7
+            if (selectedDayOfWeek == null) {
+                // Weekly Program View
+                WeeklyProgramContent(
+                    plan = plan,
+                    allExercises = allExercises,
+                    onDayClick = { dayOfWeek ->
+                        soundManager.playClick()
+                        selectedDayOfWeek = dayOfWeek
                     }
-                    val isToday = day.dayOfWeek == todayOfWeek
-
-                    TrainingDayCard(
-                        day = day,
-                        exercises = dayExercises,
-                        onAddExercise = { 
-                            soundManager.playClick()
-                            dayForNewExercise = day.dayOfWeek 
-                        },
-                        onEditExercise = { 
-                            soundManager.playClick()
-                            exerciseToEdit = it 
-                        },
-                        onDeleteExercise = { 
-                            soundManager.playClick()
-                            exerciseToDelete = it 
-                        },
-                        onToggleExercise = { 
-                            if (!it.isCompleted) soundManager.playQuestComplete()
-                            viewModel.toggleExerciseCompletion(it) 
-                        },
-                        isHighlighted = isToday && triggerHighlight
-                    )
-                }
-                
-                item { Spacer(modifier = Modifier.height(32.dp)) }
+                )
+            } else {
+                // Day Details View
+                val dayOfWeek = selectedDayOfWeek!!
+                val dayExercises = allExercises.filter { it.dayOfWeek == dayOfWeek }
+                DayDetailsContent(
+                    dayOfWeek = dayOfWeek,
+                    exercises = dayExercises,
+                    onAddExercise = {
+                        soundManager.playClick()
+                        dayForNewExercise = dayOfWeek
+                    },
+                    onEditExercise = { exercise ->
+                        soundManager.playClick()
+                        exerciseToEdit = exercise
+                    },
+                    onDeleteExercise = { exercise ->
+                        soundManager.playClick()
+                        exerciseToDelete = exercise
+                    },
+                    onToggleExercise = { exercise ->
+                        if (!exercise.isCompleted) soundManager.playQuestComplete()
+                        viewModel.toggleExerciseCompletion(exercise)
+                    },
+                    onStartTimer = { exercise ->
+                        soundManager.playClick()
+                        timerExercise = exercise
+                    }
+                )
             }
 
             // Day Reward Celebration Overlay
@@ -311,6 +321,262 @@ fun TrainingPlanScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("+$xp XP", color = Color.White, fontWeight = FontWeight.Black, fontSize = 32.sp)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyProgramContent(
+    plan: List<TrainingDay>,
+    allExercises: List<PlannedExercise>,
+    onDayClick: (Int) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            WeeklyProgressHeader(plan, allExercises)
+        }
+
+        items(plan) { day ->
+            val dayExercisesCount = allExercises.count { it.dayOfWeek == day.dayOfWeek }
+            DayNavigationCard(
+                day = day,
+                exerciseCount = dayExercisesCount,
+                onClick = { onDayClick(day.dayOfWeek) }
+            )
+        }
+        
+        item { Spacer(modifier = Modifier.height(32.dp)) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DayNavigationCard(
+    day: TrainingDay,
+    exerciseCount: Int,
+    onClick: () -> Unit
+) {
+    val dayName = getDayName(day.dayOfWeek)
+    val calendar = Calendar.getInstance()
+    val todayOfWeek = getCurrentDayOfWeek()
+    
+    val isCompletedThisWeek = day.isCompleted && 
+            day.lastCompletedWeek == calendar.get(Calendar.WEEK_OF_YEAR) && 
+            day.lastCompletedYear == calendar.get(Calendar.YEAR)
+    val isToday = day.dayOfWeek == todayOfWeek
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = if (isToday) 2.dp else 1.dp,
+            color = when {
+                isToday -> Color(0xFF03DAC6)
+                isCompletedThisWeek -> Color(0xFF03DAC6).copy(alpha = 0.3f)
+                else -> Color.Gray.copy(alpha = 0.2f)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    dayName.uppercase(),
+                    color = if (isToday) Color(0xFF03DAC6) else Color.White,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                    fontSize = 16.sp
+                )
+                Text(
+                    if (exerciseCount == 0) "Rest Day" else "$exerciseCount Exercises",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isCompletedThisWeek) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF03DAC6), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+            }
+        }
+    }
+}
+
+@Composable
+fun DayDetailsContent(
+    dayOfWeek: Int,
+    exercises: List<PlannedExercise>,
+    onAddExercise: () -> Unit,
+    onEditExercise: (PlannedExercise) -> Unit,
+    onDeleteExercise: (PlannedExercise) -> Unit,
+    onToggleExercise: (PlannedExercise) -> Unit,
+    onStartTimer: (PlannedExercise) -> Unit
+) {
+    val todayOfWeek = getCurrentDayOfWeek()
+    val isCompletable = dayOfWeek == todayOfWeek
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (exercises.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(top = 100.dp), contentAlignment = Alignment.Center) {
+                    Text("NO EXERCISES SCHEDULED", color = Color.Gray.copy(alpha = 0.4f), fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                }
+            }
+        } else {
+            items(exercises) { exercise ->
+                PlannedExerciseItemCompact(
+                    exercise = exercise,
+                    isCompletable = isCompletable,
+                    onEdit = { onEditExercise(exercise) },
+                    onDelete = { onDeleteExercise(exercise) },
+                    onToggle = { onToggleExercise(exercise) },
+                    onStartTimer = { onStartTimer(exercise) }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(
+                onClick = onAddExercise,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBB86FC))
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("ADD EXERCISE", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun PlannedExerciseItemCompact(
+    exercise: PlannedExercise,
+    isCompletable: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggle: () -> Unit,
+    onStartTimer: () -> Unit
+) {
+    val calendar = Calendar.getInstance()
+    val isCompletedNow = exercise.isCompleted && 
+            exercise.lastCompletedWeek == calendar.get(Calendar.WEEK_OF_YEAR) && 
+            exercise.lastCompletedYear == calendar.get(Calendar.YEAR)
+
+    var showMenu by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFF1A1A1A).copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, if (isCompletedNow) Color(0xFF03DAC6).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f))
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable { onEdit() }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = exercise.name.uppercase(),
+                        color = if (isCompletedNow) Color(0xFF03DAC6) else Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1
+                    )
+                    if (isCompletedNow) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF03DAC6), modifier = Modifier.size(16.dp))
+                    }
+                }
+                
+                Text(
+                    text = when (exercise.trackingType) {
+                        ExerciseTrackingType.REPS -> "${exercise.sets} × ${exercise.reps} Reps"
+                        ExerciseTrackingType.SECONDS -> "${exercise.sets} × ${exercise.seconds} Sec"
+                        ExerciseTrackingType.DISTANCE -> "${exercise.distanceKm} KM"
+                    },
+                    color = if (isCompletedNow) Color(0xFF03DAC6).copy(alpha = 0.7f) else Color(0xFFBB86FC),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if ((exercise.trackingType == ExerciseTrackingType.SECONDS || exercise.trackingType == ExerciseTrackingType.DISTANCE) && !isCompletedNow && isCompletable) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onStartTimer,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBB86FC))
+                    ) {
+                        Icon(Icons.Default.Timer, null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            if (exercise.trackingType == ExerciseTrackingType.DISTANCE) "START RUN" else "START TIMER",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isCompletable || isCompletedNow) {
+                    IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = if (isCompletedNow) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                            contentDescription = "Toggle",
+                            tint = if (isCompletedNow) Color(0xFF03DAC6) else Color.Gray.copy(alpha = 0.3f),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(Color(0xFF1F1B24))
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit", color = Color.White, fontWeight = FontWeight.Bold) },
+                            onClick = { showMenu = false; onEdit() },
+                            leadingIcon = { Icon(Icons.Default.Edit, null, tint = Color(0xFFBB86FC)) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold) },
+                            onClick = { showMenu = false; onDelete() },
+                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) }
+                        )
                     }
                 }
             }
@@ -366,304 +632,7 @@ fun WeeklyProgressHeader(plan: List<TrainingDay>, allExercises: List<PlannedExer
     }
 }
 
-@Composable
-fun TrainingDayCard(
-    day: TrainingDay,
-    exercises: List<PlannedExercise>,
-    onAddExercise: () -> Unit,
-    onEditExercise: (PlannedExercise) -> Unit,
-    onDeleteExercise: (PlannedExercise) -> Unit,
-    onToggleExercise: (PlannedExercise) -> Unit,
-    isHighlighted: Boolean = false
-) {
-    val dayName = when (day.dayOfWeek) {
-        1 -> "Monday"
-        2 -> "Tuesday"
-        3 -> "Wednesday"
-        4 -> "Thursday"
-        5 -> "Friday"
-        6 -> "Saturday"
-        7 -> "Sunday"
-        else -> ""
-    }
-
-    val calendar = Calendar.getInstance()
-    val todayOfWeek = when (calendar.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 1
-        Calendar.TUESDAY -> 2
-        Calendar.WEDNESDAY -> 3
-        Calendar.THURSDAY -> 4
-        Calendar.FRIDAY -> 5
-        Calendar.SATURDAY -> 6
-        Calendar.SUNDAY -> 7
-        else -> 7
-    }
-
-    val isCompletedThisWeek = day.isCompleted && 
-            day.lastCompletedWeek == calendar.get(Calendar.WEEK_OF_YEAR) && 
-            day.lastCompletedYear == calendar.get(Calendar.YEAR)
-
-    val isToday = day.dayOfWeek == todayOfWeek
-    val isPast = day.dayOfWeek < todayOfWeek
-    val isFuture = day.dayOfWeek > todayOfWeek
-
-    // Highlight Animation
-    val highlightAlpha by animateFloatAsState(
-        targetValue = if (isHighlighted) 0.8f else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000),
-            repeatMode = RepeatMode.Reverse
-        ), label = ""
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(
-            width = if (isToday) 2.dp else 1.dp,
-            color = when {
-                isHighlighted -> Color(0xFF03DAC6).copy(alpha = highlightAlpha)
-                isToday -> Color(0xFF03DAC6)
-                isCompletedThisWeek -> Color(0xFF03DAC6).copy(alpha = 0.3f)
-                else -> Color.Gray.copy(alpha = 0.2f)
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        dayName.uppercase(),
-                        color = if (isToday) Color(0xFF03DAC6) else Color.White,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.5.sp,
-                        fontSize = 16.sp
-                    )
-                    if (isToday) {
-                        Surface(
-                            modifier = Modifier.padding(start = 12.dp),
-                            color = Color(0xFF03DAC6).copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(4.dp),
-                            border = BorderStroke(1.dp, Color(0xFF03DAC6).copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                "TODAY",
-                                color = Color(0xFF03DAC6),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-                
-                IconButton(onClick = onAddExercise) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Exercise", tint = if (isToday) Color(0xFF03DAC6) else Color(0xFFBB86FC))
-                }
-            }
-
-            if (exercises.isEmpty()) {
-                Text(
-                    "REST DAY",
-                    color = Color.Gray.copy(alpha = 0.4f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.padding(vertical = 16.dp).align(Alignment.CenterHorizontally)
-                )
-            } else {
-                Spacer(modifier = Modifier.height(16.dp))
-                exercises.forEach { exercise ->
-                    PlannedExerciseItem(
-                        exercise = exercise,
-                        onEdit = { onEditExercise(exercise) },
-                        onDelete = { onDeleteExercise(exercise) },
-                        onToggle = { onToggleExercise(exercise) }
-                    )
-                }
-                
-                if (isCompletedThisWeek) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF03DAC6), modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("DAY COMPLETE ✓", color = Color(0xFF03DAC6), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp)
-                    }
-                } else if (isPast) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "MISSED DAY",
-                        color = Color.Red.copy(alpha = 0.5f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                } else if (isFuture) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "LOCKED UNTIL SCHEDULED DAY",
-                        color = Color.Gray.copy(alpha = 0.3f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun PlannedExerciseItem(
-    exercise: PlannedExercise,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onToggle: () -> Unit
-) {
-    val calendar = Calendar.getInstance()
-    val todayOfWeek = when (calendar.get(Calendar.DAY_OF_WEEK)) {
-        Calendar.MONDAY -> 1
-        Calendar.TUESDAY -> 2
-        Calendar.WEDNESDAY -> 3
-        Calendar.THURSDAY -> 4
-        Calendar.FRIDAY -> 5
-        Calendar.SATURDAY -> 6
-        Calendar.SUNDAY -> 7
-        else -> 7
-    }
-
-    val isCompletedNow = exercise.isCompleted && 
-            exercise.lastCompletedWeek == calendar.get(Calendar.WEEK_OF_YEAR) && 
-            exercise.lastCompletedYear == calendar.get(Calendar.YEAR)
-
-    val isCompletable = exercise.dayOfWeek == todayOfWeek
-
-    var showMenu by remember { mutableStateOf(false) }
-
-    val completedBackground = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF03DAC6).copy(alpha = 0.15f),
-            Color(0xFF03DAC6).copy(alpha = 0.05f)
-        )
-    )
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        color = Color.Transparent,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            width = if (isCompletedNow) 2.dp else 1.dp,
-            color = if (isCompletedNow) Color(0xFF03DAC6) else Color.White.copy(alpha = 0.1f)
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .background(if (isCompletedNow) completedBackground else Brush.linearGradient(listOf(Color.White.copy(alpha = 0.05f), Color.White.copy(alpha = 0.05f))))
-                .clickable { onEdit() }
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    // Line 1: Name + Checkmark Indicator
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = exercise.name,
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 20.sp,
-                            style = TextStyle(
-                                letterSpacing = 0.5.sp,
-                                shadow = if (isCompletedNow) Shadow(Color(0xFF03DAC6).copy(alpha = 0.5f), blurRadius = 10f) else null
-                            ),
-                            maxLines = 1
-                        )
-                        if (isCompletedNow) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(
-                                Icons.Default.CheckCircle, 
-                                null, 
-                                tint = Color(0xFF03DAC6), 
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    // Line 2: Details
-                    Text(
-                        text = when (exercise.trackingType) {
-                            ExerciseTrackingType.REPS -> "${exercise.sets} × ${exercise.reps} Reps"
-                            ExerciseTrackingType.SECONDS -> "${exercise.sets} × ${exercise.seconds} Sec"
-                            ExerciseTrackingType.DISTANCE -> "${exercise.distanceKm} KM"
-                        },
-                        color = if (isCompletedNow) Color(0xFF03DAC6) else Color(0xFFBB86FC),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isCompletable || isCompletedNow) {
-                        IconButton(
-                            onClick = { onToggle() },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isCompletedNow) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                contentDescription = "Toggle Completion",
-                                tint = if (isCompletedNow) Color(0xFF03DAC6) else Color.Gray.copy(alpha = 0.4f),
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-
-                    Box {
-                        IconButton(onClick = { showMenu = true }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White.copy(alpha = 0.4f))
-                        }
-                        
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier.background(Color(0xFF1F1B24))
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Edit", color = Color.White, fontWeight = FontWeight.Bold) },
-                                onClick = {
-                                    showMenu = false
-                                    onEdit()
-                                },
-                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Color(0xFFBB86FC)) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold) },
-                                onClick = {
-                                    showMenu = false
-                                    onDelete()
-                                },
-                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditExerciseDialog(
     exercise: PlannedExercise? = null,
@@ -679,146 +648,208 @@ fun AddEditExerciseDialog(
     var seconds by remember { mutableStateOf(exercise?.seconds?.toString() ?: "") }
     var distance by remember { mutableStateOf(exercise?.distanceKm?.toString() ?: "") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F1B24)),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f))
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Color(0xFF1A1A1A),
+        scrimColor = Color.Black.copy(alpha = 0.7f),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFFBB86FC).copy(alpha = 0.4f)) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp, top = 8.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text(
-                    if (exercise == null) "NEW EXERCISE" else "EDIT EXERCISE",
-                    color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp
+            Text(
+                text = if (exercise == null) "NEW EXERCISE" else "EDIT EXERCISE",
+                color = Color.White,
+                style = TextStyle(
+                    fontSize = 24.sp, 
+                    fontWeight = FontWeight.Black, 
+                    letterSpacing = 2.sp,
+                    shadow = Shadow(Color(0xFFBB86FC).copy(alpha = 0.3f), blurRadius = 10f)
                 )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
+            )
+
+            // Exercise Name Field
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("NAME", color = Color(0xFFBB86FC), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Exercise Name") },
+                    placeholder = { Text("e.g. Diamond Pushups", color = Color.Gray) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
                         focusedBorderColor = Color(0xFFBB86FC),
-                        unfocusedBorderColor = Color.Gray
-                    )
+                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f),
+                        cursorColor = Color(0xFFBB86FC)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
                 )
+            }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("Tracking Type", color = Color.Gray, fontSize = 12.sp)
+            // Tracking Type Selection
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("TRACKING TYPE", color = Color(0xFFBB86FC), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ExerciseTypeChip("Reps", trackingType == ExerciseTrackingType.REPS) { trackingType = ExerciseTrackingType.REPS }
-                    ExerciseTypeChip("Seconds", trackingType == ExerciseTrackingType.SECONDS) { trackingType = ExerciseTrackingType.SECONDS }
-                    ExerciseTypeChip("Distance", trackingType == ExerciseTrackingType.DISTANCE) { trackingType = ExerciseTrackingType.DISTANCE }
+                    ExerciseTypeChip(
+                        label = "REPS", 
+                        selected = trackingType == ExerciseTrackingType.REPS,
+                        modifier = Modifier.weight(1f)
+                    ) { trackingType = ExerciseTrackingType.REPS }
+                    
+                    ExerciseTypeChip(
+                        label = "SECONDS", 
+                        selected = trackingType == ExerciseTrackingType.SECONDS,
+                        modifier = Modifier.weight(1f)
+                    ) { trackingType = ExerciseTrackingType.SECONDS }
+                    
+                    ExerciseTypeChip(
+                        label = "DISTANCE", 
+                        selected = trackingType == ExerciseTrackingType.DISTANCE,
+                        modifier = Modifier.weight(1f)
+                    ) { trackingType = ExerciseTrackingType.DISTANCE }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
+            // Dynamic Quantitative Fields
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 when (trackingType) {
                     ExerciseTrackingType.REPS -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CompactInput("Sets", sets, { sets = it }, Modifier.weight(1f))
-                            CompactInput("Reps", reps, { reps = it }, Modifier.weight(1f))
+                            SpaciousInput("SETS", sets, { sets = it }, Modifier.weight(1f))
+                            SpaciousInput("REPS", reps, { reps = it }, Modifier.weight(1f))
                         }
                     }
                     ExerciseTrackingType.SECONDS -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            CompactInput("Sets", sets, { sets = it }, Modifier.weight(1f))
-                            CompactInput("Seconds", seconds, { seconds = it }, Modifier.weight(1f))
+                            SpaciousInput("SETS", sets, { sets = it }, Modifier.weight(1f))
+                            SpaciousInput("SECONDS", seconds, { seconds = it }, Modifier.weight(1f))
                         }
                     }
                     ExerciseTrackingType.DISTANCE -> {
-                        CompactInput("Distance (KM)", distance, { distance = it }, Modifier.fillMaxWidth(), isDecimal = true)
+                        SpaciousInput("DISTANCE (KM)", distance, { distance = it }, Modifier.fillMaxWidth(), isDecimal = true)
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (onDelete != null) {
-                        Button(
-                            onClick = onDelete,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.7f))
-                        ) {
-                            Text("DELETE", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            if (name.isNotBlank()) {
-                                onConfirm(
-                                    name,
-                                    trackingType,
-                                    sets.toIntOrNull(),
-                                    reps.toIntOrNull(),
-                                    seconds.toIntOrNull(),
-                                    distance.toDoubleOrNull()
-                                )
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
+            // Action Row
+            Row(
+                modifier = Modifier.fillMaxWidth(), 
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onDelete != null) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(Color.Red.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.Red.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                     ) {
-                        Text("CONFIRM", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
                     }
+                }
+                
+                Button(
+                    onClick = {
+                        if (name.isNotBlank()) {
+                            onConfirm(
+                                name,
+                                trackingType,
+                                sets.toIntOrNull(),
+                                reps.toIntOrNull(),
+                                seconds.toIntOrNull(),
+                                distance.toDoubleOrNull()
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFBB86FC),
+                        disabledContainerColor = Color(0xFFBB86FC).copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = name.isNotBlank()
+                ) {
+                    Text(
+                        text = if (exercise == null) "ADD EXERCISE" else "SAVE CHANGES",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExerciseTypeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+fun ExerciseTypeChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.clickable { onClick() },
-        color = if (selected) Color(0xFFBB86FC) else Color.Transparent,
-        border = BorderStroke(1.dp, if (selected) Color(0xFFBB86FC) else Color.Gray),
-        shape = RoundedCornerShape(20.dp)
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        color = if (selected) Color(0xFFBB86FC) else Color(0xFF1F1B24),
+        border = BorderStroke(1.dp, if (selected) Color(0xFFBB86FC) else Color.Gray.copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            color = if (selected) Color.Black else Color.Gray,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                color = if (selected) Color.Black else Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun SpaciousInput(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier, isDecimal: Boolean = false) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = Color(0xFFBB86FC), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            value = value,
+            onValueChange = { input ->
+                if (isDecimal) {
+                    if (input.isEmpty() || input.toDoubleOrNull() != null || input == ".") onValueChange(input)
+                } else {
+                    if (input.all { it.isDigit() }) onValueChange(input)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = if (isDecimal) KeyboardType.Decimal else KeyboardType.Number),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFFBB86FC),
+                unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(12.dp)
         )
     }
 }
 
 @Composable
-fun CompactInput(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier, isDecimal: Boolean = false) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { input ->
-            if (isDecimal) {
-                if (input.isEmpty() || input.toDoubleOrNull() != null || input == ".") onValueChange(input)
-            } else {
-                if (input.all { it.isDigit() }) onValueChange(input)
-            }
-        },
-        label = { Text(label, fontSize = 10.sp) },
-        modifier = modifier,
-        keyboardOptions = KeyboardOptions(keyboardType = if (isDecimal) KeyboardType.Decimal else KeyboardType.Number),
-        singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = Color(0xFFBB86FC),
-            unfocusedBorderColor = Color.Gray
-        )
-    )
-}
-
-@Composable
 fun WeeklyBonusDialog(onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -876,9 +907,36 @@ fun WeeklyBonusDialog(onDismiss: () -> Unit) {
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("COLLECT", color = Color.Black, fontWeight = FontWeight.Black)
+                    Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Black)
                 }
             }
         }
+    }
+}
+
+private fun getDayName(dayOfWeek: Int): String {
+    return when (dayOfWeek) {
+        1 -> "Monday"
+        2 -> "Tuesday"
+        3 -> "Wednesday"
+        4 -> "Thursday"
+        5 -> "Friday"
+        6 -> "Saturday"
+        7 -> "Sunday"
+        else -> ""
+    }
+}
+
+private fun getCurrentDayOfWeek(): Int {
+    val calendar = Calendar.getInstance()
+    return when (calendar.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.MONDAY -> 1
+        Calendar.TUESDAY -> 2
+        Calendar.WEDNESDAY -> 3
+        Calendar.THURSDAY -> 4
+        Calendar.FRIDAY -> 5
+        Calendar.SATURDAY -> 6
+        Calendar.SUNDAY -> 7
+        else -> 7
     }
 }

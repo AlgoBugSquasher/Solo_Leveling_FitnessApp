@@ -92,100 +92,108 @@ fun HomeScreen(
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
 
+    // Progression Event Queue to ensure no events are lost
+    val eventQueue = remember { mutableStateListOf<UiEvent>() }
+    val currentEvent = eventQueue.firstOrNull()
+
+    LaunchedEffect(viewModel.uiEvent) {
+        viewModel.uiEvent.collect { event ->
+            eventQueue.add(event)
+        }
+    }
+
     // Sync sound enabled state with user preferences
     LaunchedEffect(user.soundEnabled) {
         soundManager.setEnabled(user.soundEnabled)
     }
 
-    var unlockedBadge by remember { mutableStateOf<Badge?>(null) }
-    var unlockedTitle by remember { mutableStateOf<Title?>(null) }
-    var unlockedAchievement by remember { mutableStateOf<Achievement?>(null) }
-    var newPersonalRecord by remember { mutableStateOf<UiEvent.NewPersonalRecord?>(null) }
-    var rankPromotion by remember { mutableStateOf<UiEvent.RankPromotion?>(null) }
-    
-    // Level Up Animation state
-    var levelUpData by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    
     // XP Gain Animation state
     val floatingXpEvents = remember { mutableStateListOf<FloatingXpEvent>() }
-
-    LaunchedEffect(viewModel.uiEvent) {
-        viewModel.uiEvent.collectLatest { event ->
-            when (event) {
-                is UiEvent.LevelUp -> {
-                    levelUpData = event.oldLevel to event.newLevel
-                    soundManager.playLevelUp()
-                }
-                is UiEvent.TitleUnlocked -> {
-                    unlockedTitle = event.title
-                    soundManager.playPromotion()
-                }
-                is UiEvent.BadgeUnlocked -> {
-                    unlockedBadge = event.badge
-                }
-                is UiEvent.AchievementUnlocked -> {
-                    unlockedAchievement = event.achievement
-                    soundManager.playPromotion()
-                }
-                is UiEvent.NewPersonalRecord -> {
-                    newPersonalRecord = event
-                    soundManager.playPersonalRecord()
-                }
-                is UiEvent.RankPromotion -> {
-                    rankPromotion = event
-                    soundManager.playRankPromotion()
-                }
-                else -> {}
-            }
-        }
-    }
 
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(Color(0xFF050505), Color(0xFF121212))
     )
 
-    if (unlockedBadge != null) {
-        BadgeUnlockDialog(
-            badge = unlockedBadge!!,
-            soundManager = soundManager,
-            onDismiss = { unlockedBadge = null }
-        )
-    }
+    // Handle current event from queue
+    if (currentEvent != null) {
+        // Play appropriate sound when the event first appears at the head of the queue
+        LaunchedEffect(currentEvent) {
+            when (currentEvent) {
+                is UiEvent.LevelUp -> soundManager.playLevelUp()
+                is UiEvent.TitleUnlocked -> soundManager.playPromotion()
+                is UiEvent.AchievementUnlocked -> soundManager.playPromotion()
+                is UiEvent.NewPersonalRecord -> soundManager.playPersonalRecord()
+                is UiEvent.RankPromotion -> soundManager.playRankPromotion()
+                // Badge sound is handled inside BadgeUnlockAnimation or here
+                is UiEvent.BadgeUnlocked -> { /* Played inside dialog or below */ }
+                else -> {}
+            }
+        }
 
-    if (unlockedTitle != null) {
-        TitleUnlockDialog(
-            title = unlockedTitle!!,
-            onDismiss = { unlockedTitle = null }
-        )
-    }
-
-    if (unlockedAchievement != null) {
-        AchievementUnlockDialog(
-            achievement = unlockedAchievement!!,
-            onDismiss = { unlockedAchievement = null }
-        )
-    }
-
-    if (newPersonalRecord != null) {
-        PersonalRecordDialog(
-            record = newPersonalRecord!!,
-            onDismiss = { newPersonalRecord = null }
-        )
-    }
-
-    if (rankPromotion != null) {
-        RankPromotionDialog(
-            promotion = rankPromotion!!,
-            onDismiss = { rankPromotion = null }
-        )
-    }
-
-    if (levelUpData != null) {
-        LevelUpDialog(
-            oldLevel = levelUpData!!.first,
-            newLevel = levelUpData!!.second,
-            onDismiss = { levelUpData = null }
-        )
+        when (currentEvent) {
+            is UiEvent.LevelUp -> {
+                LevelUpDialog(
+                    oldLevel = currentEvent.oldLevel,
+                    newLevel = currentEvent.newLevel,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            is UiEvent.TitleUnlocked -> {
+                TitleUnlockDialog(
+                    title = currentEvent.title,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            is UiEvent.BadgeUnlocked -> {
+                BadgeUnlockDialog(
+                    badge = currentEvent.badge,
+                    soundManager = soundManager,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            is UiEvent.AchievementUnlocked -> {
+                AchievementUnlockDialog(
+                    achievement = currentEvent.achievement,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            is UiEvent.NewPersonalRecord -> {
+                PersonalRecordDialog(
+                    record = currentEvent,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            is UiEvent.RankPromotion -> {
+                RankPromotionDialog(
+                    promotion = currentEvent,
+                    onDismiss = { 
+                        eventQueue.remove(currentEvent)
+                        soundManager.playClick()
+                    }
+                )
+            }
+            else -> {
+                // Remove other events that don't need dialogs
+                LaunchedEffect(currentEvent) {
+                    eventQueue.remove(currentEvent)
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -440,20 +448,20 @@ fun RankPromotionDialog(
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
         )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.9f))
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.9f)),
             contentAlignment = Alignment.Center
         ) {
             RankPromotionAnimation(
                 promotion = promotion,
-                onDismiss = onDismiss,
-                modifier = Modifier.clickable(enabled = false) { }
+                onDismiss = onDismiss
             )
         }
     }
@@ -637,13 +645,16 @@ fun LevelUpDialog(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.85f)),
             contentAlignment = Alignment.Center
         ) {
             LevelUpAnimation(oldLevel, newLevel, onDismiss)
@@ -654,10 +665,13 @@ fun LevelUpDialog(
 @Composable
 fun LevelUpAnimation(oldLevel: Int, newLevel: Int, onDismiss: () -> Unit) {
     var showNewLevel by remember { mutableStateOf(false) }
+    var showButton by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         delay(800)
         showNewLevel = true
+        delay(1200)
+        showButton = true
     }
 
     Column(
@@ -714,13 +728,25 @@ fun LevelUpAnimation(oldLevel: Int, newLevel: Int, onDismiss: () -> Unit) {
             }
         }
 
-        Spacer(modifier = Modifier.height(64.dp))
+        Spacer(modifier = Modifier.height(48.dp))
         
         Text(
             "YOUR POWER INCREASES",
             color = Color.LightGray,
             style = TextStyle(letterSpacing = 4.sp, fontWeight = FontWeight.Bold)
         )
+
+        if (showButton) {
+            Spacer(modifier = Modifier.height(64.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Black)
+            }
+        }
     }
 }
 
@@ -732,13 +758,16 @@ fun BadgeUnlockDialog(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.9f))
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.9f)),
             contentAlignment = Alignment.Center
         ) {
             BadgeUnlockAnimation(badge, soundManager, onDismiss)
@@ -866,7 +895,7 @@ fun BadgeUnlockAnimation(
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("COLLECT", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -880,13 +909,16 @@ fun TitleUnlockDialog(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.9f))
-                .clickable { onDismiss() },
+                .background(Color.Black.copy(alpha = 0.9f)),
             contentAlignment = Alignment.Center
         ) {
             TitleUnlockAnimation(title, onDismiss)
@@ -965,7 +997,7 @@ fun TitleUnlockAnimation(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
                 shape = RoundedCornerShape(4.dp)
             ) {
-                Text("CLAIM TITLE", color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.ExtraBold)
             }
         }
     }
@@ -976,7 +1008,13 @@ fun AchievementUnlockDialog(
     achievement: Achievement,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
         AchievementUnlockAnimation(achievement, onDismiss)
     }
 }
@@ -1028,10 +1066,11 @@ fun AchievementUnlockAnimation(achievement: Achievement, onDismiss: () -> Unit) 
             
             Button(
                 onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC))
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("EXCELLENT", color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Black)
             }
         }
     }

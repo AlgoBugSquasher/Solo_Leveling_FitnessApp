@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.FitnessRepository
 import com.example.myapplication.model.Exercise
+import com.example.myapplication.model.ExerciseCategory
+import com.example.myapplication.model.ExerciseTrackingType
 import com.example.myapplication.model.ExerciseEntity
 import com.example.myapplication.model.WorkoutEntity
-import com.example.myapplication.util.RankCalculator
 import com.example.myapplication.util.XpCalculator
-import java.util.Calendar
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -24,13 +24,25 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
     private val _eventFlow = MutableSharedFlow<WorkoutEvent>()
     val eventFlow = _eventFlow.asSharedFlow()
 
-    fun addExercise(name: String, reps: Int?, sets: Int, duration: Int?) {
-        val newExercise = Exercise(name, reps, sets, duration)
+    fun addExercise(
+        name: String,
+        category: ExerciseCategory,
+        trackingType: ExerciseTrackingType,
+        sets: Int,
+        reps: Int?,
+        duration: Int?,
+        distanceKm: Double?
+    ) {
+        val newExercise = Exercise(name, category, trackingType, reps, sets, duration, distanceKm)
         _exercises.value = _exercises.value + newExercise
     }
 
     fun removeExercise(exercise: Exercise) {
         _exercises.value = _exercises.value - exercise
+    }
+
+    fun updateExercise(oldExercise: Exercise, newExercise: Exercise) {
+        _exercises.value = _exercises.value.map { if (it == oldExercise) newExercise else it }
     }
 
     fun completeWorkout() {
@@ -40,9 +52,6 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             if (workoutExercises.isEmpty()) return@launch
 
             // 1. Calculate XP gained
-            // Using placeholder streak 0 for XP calc because repository will handle real streak
-            // but we need a value for XpCalculator. Maybe repository should handle xp calc too?
-            // For now, let's just use current streak to keep it simple.
             val xpGained = XpCalculator.calculateWorkoutXp(workoutExercises, currentUser.streak)
 
             // 2. Track total stats for this workout
@@ -52,13 +61,15 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             var addedDistance = 0.0
 
             workoutExercises.forEach { ex ->
-                val totalReps = (ex.reps ?: 0) * ex.sets
-                val totalDuration = (ex.duration ?: 0) * ex.sets
-                
-                when {
-                    ex.name.contains("Push-up", ignoreCase = true) -> addedPushups += totalReps
-                    ex.name.contains("Pull-up", ignoreCase = true) || ex.name.contains("Chin-up", ignoreCase = true) -> addedPullups += totalReps
-                    ex.name.contains("Plank", ignoreCase = true) -> addedPlankTime += totalDuration
+                when (ex.category) {
+                    ExerciseCategory.PUSHUPS -> addedPushups += (ex.reps ?: 0) * ex.sets
+                    ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
+                    ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
+                    ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
+                    ExerciseCategory.OTHER -> {
+                        // For OTHER, we might want to still track if they chose a tracking type that fits
+                        // But per requirements, we'll stick to manual category selection.
+                    }
                 }
             }
 
@@ -78,9 +89,12 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
                 ExerciseEntity(
                     workoutId = 0,
                     name = it.name,
+                    category = it.category,
+                    trackingType = it.trackingType,
                     reps = it.reps,
                     sets = it.sets,
-                    duration = it.duration
+                    duration = it.duration,
+                    distanceKm = it.distanceKm
                 )
             }
             repository.insertWorkout(workoutEntity, exerciseEntities)

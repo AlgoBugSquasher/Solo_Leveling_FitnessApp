@@ -6,6 +6,14 @@ import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 
+enum class ExerciseTrackingType {
+    REPS, SECONDS, DISTANCE
+}
+
+enum class ExerciseCategory {
+    PUSHUPS, PULLUPS, PLANK, CARDIO, OTHER
+}
+
 @Entity(tableName = "workout_table")
 data class WorkoutEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -28,9 +36,12 @@ data class ExerciseEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val workoutId: Int,
     val name: String,
+    val category: ExerciseCategory = ExerciseCategory.OTHER,
+    val trackingType: ExerciseTrackingType = ExerciseTrackingType.REPS,
     val reps: Int? = null,
     val sets: Int,
-    val duration: Int? = null
+    val duration: Int? = null,
+    val distanceKm: Double? = null
 )
 
 data class WorkoutWithExercises(
@@ -45,7 +56,10 @@ data class WorkoutWithExercises(
 // UI models
 data class Exercise(
     val name: String,
+    val category: ExerciseCategory = ExerciseCategory.OTHER,
+    val trackingType: ExerciseTrackingType = ExerciseTrackingType.REPS,
     val reps: Int? = null,
     val sets: Int,
-    val duration: Int? = null
+    val duration: Int? = null,
+    val distanceKm: Double? = null
 )

@@ -8,6 +8,9 @@ import com.example.myapplication.model.WeeklyBonusEntity
 import com.example.myapplication.model.User
 import com.example.myapplication.model.PlannedExercise
 import com.example.myapplication.model.ExerciseTrackingType
+import com.example.myapplication.model.Exercise
+import com.example.myapplication.model.ExerciseCategory
+import com.example.myapplication.util.XpCalculator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
@@ -140,6 +143,16 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
                     pullups = addedPullups,
                     plankSeconds = addedPlank,
                     distanceKm = addedDist,
+                    xpGained = XpCalculator.calculateExerciseXp(
+                        Exercise(
+                            name = exercise.name,
+                            trackingType = exercise.trackingType,
+                            sets = exercise.sets ?: 1,
+                            reps = exercise.reps,
+                            duration = exercise.seconds,
+                            distanceKm = exercise.distanceKm
+                        )
+                    ),
                     isWorkout = false
                 )
             }

@@ -108,7 +108,7 @@ class FitnessRepository(
         val newRank = RankCalculator.calculateRank(newLevel)
         val isRankPromotion = RankCalculator.isPromotion(currentUser.rank, newRank)
 
-        // Streak calculation based on calendar days
+        // Streak calculation (Respecting Training Plan Rest Days)
         val newStreak = calculateNewStreak(currentUser.lastWorkoutDate, currentUser.streak)
 
         if (newLevel > currentUser.level) {
@@ -128,13 +128,13 @@ class FitnessRepository(
         }
 
         // PR detection for physical records
-        if (pushups > currentUser.maxPushupsSingleWorkout && currentUser.maxPushupsSingleWorkout > 0) {
+        if (pushups > currentUser.maxPushupsSingleWorkout) {
             recordJourneyEvent("PERSONAL_RECORD", "PERSONAL RECORD", "Highest Pushups: $pushups", "💪")
         }
-        if (pullups > currentUser.maxPullupsSingleWorkout && currentUser.maxPullupsSingleWorkout > 0) {
+        if (pullups > currentUser.maxPullupsSingleWorkout) {
             recordJourneyEvent("PERSONAL_RECORD", "PERSONAL RECORD", "Highest Pullups: $pullups", "💪")
         }
-        if (plankSeconds > currentUser.maxPlankSingleWorkout && currentUser.maxPlankSingleWorkout > 0) {
+        if (plankSeconds > currentUser.maxPlankSingleWorkout) {
             recordJourneyEvent("PERSONAL_RECORD", "PERSONAL RECORD", "Longest Plank: $plankSeconds sec", "💪")
         }
 
@@ -163,30 +163,68 @@ class FitnessRepository(
         checkAndUnlockAbilities(updatedUser)
     }
 
-    private fun calculateNewStreak(lastActivityDate: Long, currentStreak: Int): Int {
-        val now = System.currentTimeMillis()
+    private suspend fun calculateNewStreak(lastActivityDate: Long, currentStreak: Int): Int {
         if (lastActivityDate == 0L) return 1
 
-        val lastDate = Calendar.getInstance().apply { timeInMillis = lastActivityDate }
-        val currentDate = Calendar.getInstance().apply { timeInMillis = now }
+        val lastDate = Calendar.getInstance().apply {
+            timeInMillis = lastActivityDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val currentDate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
 
         // Same day: streak stays same
-        if (lastDate.get(Calendar.YEAR) == currentDate.get(Calendar.YEAR) &&
-            lastDate.get(Calendar.DAY_OF_YEAR) == currentDate.get(Calendar.DAY_OF_YEAR)
-        ) {
+        if (lastDate.timeInMillis == currentDate.timeInMillis) {
             return currentStreak
         }
 
         // Consecutive day: increment
-        lastDate.add(Calendar.DAY_OF_YEAR, 1)
-        if (lastDate.get(Calendar.YEAR) == currentDate.get(Calendar.YEAR) &&
-            lastDate.get(Calendar.DAY_OF_YEAR) == currentDate.get(Calendar.DAY_OF_YEAR)
-        ) {
+        val nextDay = (lastDate.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+        if (nextDay.timeInMillis == currentDate.timeInMillis) {
             return currentStreak + 1
         }
 
-        // Broken streak: reset to 1
-        return 1
+        // Check for missed workout days in between (if there's a Training Plan)
+        val plannedExercises = allPlannedExercises.first()
+        if (plannedExercises.isEmpty()) {
+            // No Training Plan: default to calendar-day logic (non-consecutive is broken)
+            return 1
+        }
+
+        // Map which days of the week have scheduled exercises
+        val workoutDays = plannedExercises.map { it.dayOfWeek }.toSet()
+
+        // Iterate through all days strictly between last workout and today
+        val checkDate = (lastDate.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+
+        while (checkDate.before(currentDate)) {
+            val dayOfWeek = when (checkDate.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 1
+                Calendar.TUESDAY -> 2
+                Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4
+                Calendar.FRIDAY -> 5
+                Calendar.SATURDAY -> 6
+                Calendar.SUNDAY -> 7
+                else -> 7
+            }
+
+            // If this intermediate day was a scheduled workout day, streak is broken
+            if (workoutDays.contains(dayOfWeek)) {
+                return 1
+            }
+            checkDate.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        // Only rest days or no scheduled days were found in between
+        return currentStreak + 1
     }
 
     suspend fun insertWorkout(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {

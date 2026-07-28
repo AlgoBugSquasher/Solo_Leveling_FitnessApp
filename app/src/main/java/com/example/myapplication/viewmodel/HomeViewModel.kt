@@ -27,7 +27,7 @@ import org.json.JSONObject
  */
 class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
 
-    private val _uiEvent = MutableSharedFlow<UiEvent>()
+    private val _uiEvent = MutableSharedFlow<UiEvent>(replay = 0, extraBufferCapacity = 64)
     val uiEvent = _uiEvent.asSharedFlow()
 
     private val badgeMilestones = listOf(1, 5, 10, 15, 20, 25, 30, 40, 50, 60, 65, 70, 80, 90, 100)
@@ -36,7 +36,7 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
     private var lastSeenUser: User? = null
 
     val user: StateFlow<User> = repository.user
-        .onEach { 
+        .onEach {
             if (it == null) {
                 viewModelScope.launch {
                     repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
@@ -57,6 +57,18 @@ class HomeViewModel(private val repository: FitnessRepository) : ViewModel() {
                     // Monitor for level ups
                     if (it.level > previousUser.level) {
                         _uiEvent.emit(UiEvent.LevelUp(previousUser.level, it.level))
+                    }
+
+                    // Monitor for badge unlocks (Level based)
+                    BadgeData.allBadges.forEach { badge ->
+                        val wasReached = previousUser.level >= badge.requiredLevel
+                        val isReached = it.level >= badge.requiredLevel
+                        if (!wasReached && isReached) {
+                            _uiEvent.emit(UiEvent.BadgeUnlocked(badge))
+                            viewModelScope.launch {
+                                repository.recordJourneyEvent("BADGE_UNLOCKED", "BADGE UNLOCKED", badge.name, "🏅")
+                            }
+                        }
                     }
 
                     AchievementData.allAchievements.forEach { achievement ->
