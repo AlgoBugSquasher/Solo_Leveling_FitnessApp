@@ -38,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.myapplication.model.ExerciseTrackingType
 import com.example.myapplication.model.PlannedExercise
 import com.example.myapplication.model.TrainingDay
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.TrainingPlanViewModel
 import com.example.myapplication.ui.components.ExerciseTimerDialog
@@ -49,6 +50,7 @@ import java.util.*
 @Composable
 fun TrainingPlanScreen(
     viewModel: TrainingPlanViewModel,
+    onStartTodayTraining: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val plan by viewModel.trainingPlan.collectAsState()
@@ -58,10 +60,6 @@ fun TrainingPlanScreen(
     
     // Navigation State: null means Weekly Program View, Int means Day Details View for that dayOfWeek
     var selectedDayOfWeek by remember { mutableStateOf<Int?>(null) }
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
 
     var showBonusPopup by remember { mutableStateOf(false) }
     var exerciseToEdit by remember { mutableStateOf<PlannedExercise?>(null) }
@@ -142,7 +140,7 @@ fun TrainingPlanScreen(
                     Text("CANCEL", color = Color.White)
                 }
             },
-            containerColor = Color(0xFF1F1B24),
+            containerColor = TranslucentSlate,
             titleContentColor = Color.White,
             textContentColor = Color.LightGray
         )
@@ -230,7 +228,7 @@ fun TrainingPlanScreen(
             TopAppBar(
                 title = { 
                     Text(
-                        if (selectedDayOfWeek == null) "Weekly Program" else getDayName(selectedDayOfWeek!!).uppercase(), 
+                        if (selectedDayOfWeek == null) "Today's Training" else "Today's Exercises", 
                         color = Color.White, 
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp
@@ -251,12 +249,11 @@ fun TrainingPlanScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             if (selectedDayOfWeek == null) {
@@ -276,6 +273,7 @@ fun TrainingPlanScreen(
                 DayDetailsContent(
                     dayOfWeek = dayOfWeek,
                     exercises = dayExercises,
+                    onStartTodayTraining = onStartTodayTraining,
                     onAddExercise = {
                         soundManager.playClick()
                         dayForNewExercise = dayOfWeek
@@ -307,17 +305,14 @@ fun TrainingPlanScreen(
                 modifier = Modifier.align(Alignment.Center)
             ) {
                 dayRewardAnimation?.let { xp ->
-                    Surface(
-                        color = Color(0xFF2D1B4E),
-                        shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(2.dp, Color(0xFF03DAC6)),
-                        tonalElevation = 8.dp
+                    ExorkNeumorphicCard(
+                        modifier = Modifier.padding(24.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(24.dp),
+                            modifier = Modifier.padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("DAY COMPLETE", color = Color(0xFF03DAC6), fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+                            Text("DAY COMPLETE", color = ChromeSilver, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("+$xp XP", color = Color.White, fontWeight = FontWeight.Black, fontSize = 32.sp)
                         }
@@ -336,7 +331,12 @@ fun WeeklyProgramContent(
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(24.dp),
+        contentPadding = PaddingValues(
+            top = 24.dp,
+            bottom = 120.dp,
+            start = 24.dp,
+            end = 24.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -351,12 +351,9 @@ fun WeeklyProgramContent(
                 onClick = { onDayClick(day.dayOfWeek) }
             )
         }
-        
-        item { Spacer(modifier = Modifier.height(32.dp)) }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DayNavigationCard(
     day: TrainingDay,
@@ -372,38 +369,29 @@ fun DayNavigationCard(
             day.lastCompletedYear == calendar.get(Calendar.YEAR)
     val isToday = day.dayOfWeek == todayOfWeek
 
-    Card(
+    ExorkNeumorphicCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            width = if (isToday) 2.dp else 1.dp,
-            color = when {
-                isToday -> Color(0xFF03DAC6)
-                isCompletedThisWeek -> Color(0xFF03DAC6).copy(alpha = 0.3f)
-                else -> Color.Gray.copy(alpha = 0.2f)
-            }
-        )
+        cornerRadius = 16.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
                     dayName.uppercase(),
-                    color = if (isToday) Color(0xFF03DAC6) else Color.White,
+                    color = if (isToday) ChromeSilver else Color.White,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp,
                     fontSize = 16.sp
                 )
                 Text(
                     if (exerciseCount == 0) "Rest Day" else "$exerciseCount Exercises",
-                    color = Color.Gray,
+                    color = TitaniumGray,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -411,10 +399,10 @@ fun DayNavigationCard(
             
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isCompletedThisWeek) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF03DAC6), modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = ChromeSilver, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                 }
-                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TitaniumGray)
             }
         }
     }
@@ -424,6 +412,7 @@ fun DayNavigationCard(
 fun DayDetailsContent(
     dayOfWeek: Int,
     exercises: List<PlannedExercise>,
+    onStartTodayTraining: () -> Unit,
     onAddExercise: () -> Unit,
     onEditExercise: (PlannedExercise) -> Unit,
     onDeleteExercise: (PlannedExercise) -> Unit,
@@ -435,13 +424,19 @@ fun DayDetailsContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(
+            top = 16.dp,
+            bottom = 120.dp,
+            start = 16.dp,
+            end = 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+
         if (exercises.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 100.dp), contentAlignment = Alignment.Center) {
-                    Text("NO EXERCISES SCHEDULED", color = Color.Gray.copy(alpha = 0.4f), fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                    Text("NO EXERCISES SCHEDULED", color = TitaniumGray.copy(alpha = 0.4f), fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 }
             }
         } else {
@@ -458,16 +453,12 @@ fun DayDetailsContent(
         }
 
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-            TextButton(
+            Spacer(modifier = Modifier.height(8.dp))
+            ExorkChromeButton(
+                text = "ADD EXERCISE",
                 onClick = onAddExercise,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBB86FC))
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("ADD EXERCISE", fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -488,23 +479,19 @@ fun PlannedExerciseItemCompact(
 
     var showMenu by remember { mutableStateOf(false) }
 
-    Surface(
+    ExorkNeumorphicCard(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFF1A1A1A).copy(alpha = 0.4f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, if (isCompletedNow) Color(0xFF03DAC6).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f))
+        onClick = onEdit
     ) {
         Row(
-            modifier = Modifier
-                .clickable { onEdit() }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = exercise.name.uppercase(),
-                        color = if (isCompletedNow) Color(0xFF03DAC6) else Color.White,
+                        color = if (isCompletedNow) ChromeSilver else Color.White,
                         fontWeight = FontWeight.Black,
                         fontSize = 15.sp,
                         letterSpacing = 0.5.sp,
@@ -512,7 +499,7 @@ fun PlannedExerciseItemCompact(
                     )
                     if (isCompletedNow) {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF03DAC6), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CheckCircle, null, tint = ChromeSilver, modifier = Modifier.size(16.dp))
                     }
                 }
                 
@@ -522,19 +509,19 @@ fun PlannedExerciseItemCompact(
                         ExerciseTrackingType.SECONDS -> "${exercise.sets} × ${exercise.seconds} Sec"
                         ExerciseTrackingType.DISTANCE -> "${exercise.distanceKm} KM"
                     },
-                    color = if (isCompletedNow) Color(0xFF03DAC6).copy(alpha = 0.7f) else Color(0xFFBB86FC),
+                    color = TitaniumGray,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
 
                 if ((exercise.trackingType == ExerciseTrackingType.SECONDS || exercise.trackingType == ExerciseTrackingType.DISTANCE) && !isCompletedNow && isCompletable) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = onStartTimer,
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBB86FC))
-                    ) {
+                        TextButton(
+                            onClick = onStartTimer,
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = ChromeSilver)
+                        ) {
                         Icon(Icons.Default.Timer, null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -552,7 +539,7 @@ fun PlannedExerciseItemCompact(
                         Icon(
                             imageVector = if (isCompletedNow) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                             contentDescription = "Toggle",
-                            tint = if (isCompletedNow) Color(0xFF03DAC6) else Color.Gray.copy(alpha = 0.3f),
+                            tint = if (isCompletedNow) ChromeSilver else TitaniumGray.copy(alpha = 0.3f),
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -560,17 +547,17 @@ fun PlannedExerciseItemCompact(
 
                 Box {
                     IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = TitaniumGray, modifier = Modifier.size(20.dp))
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
-                        modifier = Modifier.background(Color(0xFF1F1B24))
+                        modifier = Modifier.background(ObsidianVoid)
                     ) {
                         DropdownMenuItem(
                             text = { Text("Edit", color = Color.White, fontWeight = FontWeight.Bold) },
                             onClick = { showMenu = false; onEdit() },
-                            leadingIcon = { Icon(Icons.Default.Edit, null, tint = Color(0xFFBB86FC)) }
+                            leadingIcon = { Icon(Icons.Default.Edit, null, tint = ChromeSilver) }
                         )
                         DropdownMenuItem(
                             text = { Text("Delete", color = Color.Red, fontWeight = FontWeight.Bold) },
@@ -599,17 +586,13 @@ fun WeeklyProgressHeader(plan: List<TrainingDay>, allExercises: List<PlannedExer
     }
     val totalTrainingDays = activeDayOfWeek.size
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1B4E).copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(16.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "WEEKLY PROGRESS",
-                color = Color(0xFFBB86FC),
+                color = TitaniumGray,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -618,15 +601,9 @@ fun WeeklyProgressHeader(plan: List<TrainingDay>, allExercises: List<PlannedExer
                 color = Color.White,
                 style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold)
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            LinearProgressIndicator(
-                progress = { if (totalTrainingDays > 0) completedCount.toFloat() / totalTrainingDays else 0f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = Color(0xFFBB86FC),
-                trackColor = Color.White.copy(alpha = 0.1f)
+            Spacer(modifier = Modifier.height(20.dp))
+            ExorkNeumorphicProgressBar(
+                progress = if (totalTrainingDays > 0) completedCount.toFloat() / totalTrainingDays else 0f
             )
         }
     }
@@ -651,13 +628,20 @@ fun AddEditExerciseDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF1A1A1A),
+        containerColor = Color(0xF2121215), // 95% opacity LeatherDeep
         scrimColor = Color.Black.copy(alpha = 0.7f),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFFBB86FC).copy(alpha = 0.4f)) }
+        dragHandle = { BottomSheetDefaults.DragHandle(color = TitaniumGray) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .border(
+                    BorderStroke(
+                        1.5.dp, 
+                        Brush.linearGradient(listOf(ChromeSilver, Color(0xFF3A3A3E)))
+                    ), 
+                    RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                )
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp, top = 8.dp)
                 .verticalScroll(rememberScrollState()),
@@ -670,24 +654,26 @@ fun AddEditExerciseDialog(
                     fontSize = 24.sp, 
                     fontWeight = FontWeight.Black, 
                     letterSpacing = 2.sp,
-                    shadow = Shadow(Color(0xFFBB86FC).copy(alpha = 0.3f), blurRadius = 10f)
+                    shadow = Shadow(Color.Black, blurRadius = 10f)
                 )
             )
 
             // Exercise Name Field
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("NAME", color = Color(0xFFBB86FC), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                Text("NAME", color = ChromeSilver, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("e.g. Diamond Pushups", color = Color.Gray) },
+                    placeholder = { Text("e.g. Diamond Pushups", color = TitaniumGray) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFFBB86FC),
-                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f),
-                        cursorColor = Color(0xFFBB86FC)
+                        focusedContainerColor = ObsidianVoid,
+                        unfocusedContainerColor = ObsidianVoid,
+                        focusedBorderColor = ChromeSilver,
+                        unfocusedBorderColor = Color(0xFF3A3A3E),
+                        cursorColor = ChromeSilver
                     ),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true
@@ -696,7 +682,7 @@ fun AddEditExerciseDialog(
 
             // Tracking Type Selection
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("TRACKING TYPE", color = Color(0xFFBB86FC), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                Text("TRACKING TYPE", color = ChromeSilver, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ExerciseTypeChip(
                         label = "REPS", 
@@ -759,7 +745,8 @@ fun AddEditExerciseDialog(
                     }
                 }
                 
-                Button(
+                ExorkChromeButton(
+                    text = if (exercise == null) "ADD EXERCISE" else "SAVE CHANGES",
                     onClick = {
                         if (name.isNotBlank()) {
                             onConfirm(
@@ -772,40 +759,29 @@ fun AddEditExerciseDialog(
                             )
                         }
                     },
-                    modifier = Modifier.weight(1f).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFBB86FC),
-                        disabledContainerColor = Color(0xFFBB86FC).copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = name.isNotBlank()
-                ) {
-                    Text(
-                        text = if (exercise == null) "ADD EXERCISE" else "SAVE CHANGES",
-                        color = Color.Black,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
-                }
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseTypeChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = modifier.height(48.dp),
-        color = if (selected) Color(0xFFBB86FC) else Color(0xFF1F1B24),
-        border = BorderStroke(1.dp, if (selected) Color(0xFFBB86FC) else Color.Gray.copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) Color.Transparent else Color(0xFF1A1A1E),
+        border = if (selected) null else BorderStroke(1.dp, ChromeSilver.copy(alpha = 0.2f))
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = if (selected) Modifier.background(Brush.verticalGradient(listOf(ChromeSilver, TitaniumGray))) else Modifier,
+            contentAlignment = Alignment.Center
+        ) {
             Text(
                 text = label,
-                color = if (selected) Color.Black else Color.Gray,
+                color = if (selected) ObsidianVoid else TitaniumGray,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp
@@ -817,7 +793,13 @@ fun ExerciseTypeChip(label: String, selected: Boolean, modifier: Modifier = Modi
 @Composable
 fun SpaciousInput(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier, isDecimal: Boolean = false) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, color = Color(0xFFBB86FC), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(
+            label, 
+            color = ChromeSilver, 
+            fontSize = 11.sp, 
+            fontWeight = FontWeight.Bold,
+            style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 4f))
+        )
         OutlinedTextField(
             value = value,
             onValueChange = { input ->
@@ -833,8 +815,10 @@ fun SpaciousInput(label: String, value: String, onValueChange: (String) -> Unit,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFFBB86FC),
-                unfocusedBorderColor = Color.Gray.copy(alpha = 0.4f)
+                focusedContainerColor = ObsidianVoid,
+                unfocusedContainerColor = ObsidianVoid,
+                focusedBorderColor = ChromeSilver,
+                unfocusedBorderColor = Color(0xFF3A3A3E)
             ),
             shape = RoundedCornerShape(12.dp)
         )
@@ -854,8 +838,8 @@ fun WeeklyBonusDialog(onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(24.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F051D)),
+                .border(2.dp, ElectricCyan, RoundedCornerShape(24.dp)),
+            colors = CardDefaults.cardColors(containerColor = MonarchSlate),
             shape = RoundedCornerShape(24.dp)
         ) {
             Column(
@@ -864,13 +848,13 @@ fun WeeklyBonusDialog(onDismiss: () -> Unit) {
             ) {
                 Text(
                     "TRAINING REGIMEN COMPLETE",
-                    color = Color(0xFFFFD700),
+                    color = ElectricCyan,
                     textAlign = TextAlign.Center,
                     style = TextStyle(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp,
-                        shadow = Shadow(Color(0xFFFFD700), blurRadius = 15f)
+                        shadow = Shadow(ElectricCyan, blurRadius = 15f)
                     )
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -881,15 +865,15 @@ fun WeeklyBonusDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Surface(
-                    color = Color(0xFFBB86FC).copy(alpha = 0.2f),
+                    color = ManaPurple.copy(alpha = 0.2f),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFFBB86FC))
+                    border = BorderStroke(1.dp, ManaPurple)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("BONUS REWARD", color = Color(0xFFBB86FC), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("BONUS REWARD", color = ManaPurple, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Text("+1000 XP", color = Color.White, fontWeight = FontWeight.Black, fontSize = 24.sp)
                     }
                 }
@@ -903,11 +887,11 @@ fun WeeklyBonusDialog(onDismiss: () -> Unit) {
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBB86FC)),
+                    colors = ButtonDefaults.buttonColors(containerColor = ManaPurple),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("CONTINUE", color = Color.Black, fontWeight = FontWeight.Black)
+                    Text("CONTINUE", color = MonarchSlate, fontWeight = FontWeight.Black)
                 }
             }
         }

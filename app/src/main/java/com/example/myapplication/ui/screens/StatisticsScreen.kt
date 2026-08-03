@@ -23,9 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import com.example.myapplication.util.SoundManager
 import com.example.myapplication.model.Badge
 import com.example.myapplication.model.User
+import com.example.myapplication.ui.theme.*
+import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.StatisticsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,14 +38,11 @@ fun StatisticsScreen(
     val user by viewModel.user.collectAsState()
     val unlockedBadges by viewModel.unlockedBadges.collectAsState()
     val highestBadge by viewModel.highestBadge.collectAsState()
+    val weeklyXp by viewModel.weeklyXp.collectAsState()
     val totalBadges = viewModel.totalBadges
 
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
 
     Scaffold(
         topBar = {
@@ -61,18 +59,22 @@ fun StatisticsScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             user?.let { currentUser ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(
+                        top = 16.dp,
+                        bottom = 120.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // 1. Header: Player Status
@@ -81,16 +83,16 @@ fun StatisticsScreen(
                     // 2. Main Stats Grid
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("LIFE STATISTICS", color = Color(0xFFBB86FC), fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
+                            Text("LIFE STATISTICS", color = ChromeSilver, fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
                             
-                            StatGrid(currentUser)
+                            StatGrid(currentUser, weeklyXp)
                         }
                     }
 
                     // 3. Progress Section
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Text("PROGRESSION", color = Color(0xFFBB86FC), fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
+                            Text("PROGRESSION", color = ChromeSilver, fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
                             
                             ProgressCard("Badge Collection", unlockedBadges.size, totalBadges, "Badges Unlocked")
                             
@@ -117,14 +119,10 @@ fun StatisticsScreen(
 
 @Composable
 fun PlayerStatusHeader(user: User) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1B4E).copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(16.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Text(
                 "PLAYER STATUS",
                 color = Color.White,
@@ -132,16 +130,16 @@ fun PlayerStatusHeader(user: User) {
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 4.sp,
-                    shadow = Shadow(color = Color(0xFFBB86FC), blurRadius = 20f)
+                    shadow = Shadow(color = Color.Black, blurRadius = 20f)
                 )
             )
             
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = Color(0xFFBB86FC).copy(alpha = 0.3f))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = ChromeSilver.copy(alpha = 0.2f))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 StatusItem("Level", user.level.toString(), Color.White)
-                StatusItem("Rank", user.rank, Color(0xFFBB86FC))
-                StatusItem("Streak", "${user.streak}d", Color(0xFF03DAC6))
+                StatusItem("Rank", user.rank, ChromeSilver)
+                StatusItem("Streak", "${user.streak}d", ChromeSilver)
             }
         }
     }
@@ -150,15 +148,16 @@ fun PlayerStatusHeader(user: User) {
 @Composable
 fun StatusItem(label: String, value: String, color: Color) {
     Column {
-        Text(label, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = TitaniumGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text(value, color = color, fontSize = 20.sp, fontWeight = FontWeight.Black)
     }
 }
 
 @Composable
-fun StatGrid(user: User) {
+fun StatGrid(user: User, weeklyXp: Int) {
     val stats = listOf(
         "Total XP" to user.totalXpEarned,
+        "Weekly XP" to weeklyXp,
         "Workouts" to user.totalWorkouts,
         "Best Streak" to user.highestStreak,
         "Promotions" to user.totalPromotions,
@@ -188,16 +187,15 @@ fun StatCard(label: String, value: Int, modifier: Modifier = Modifier) {
         animatedValue.animateTo(value.toFloat(), animationSpec = tween(1500))
     }
 
-    Card(
+    ExorkNeumorphicCard(
         modifier = modifier.height(80.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-        shape = RoundedCornerShape(12.dp)
+        cornerRadius = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center
         ) {
-            Text(label, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = TitaniumGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text(
                 animatedValue.value.toInt().toString(),
                 color = Color.White,
@@ -210,24 +208,19 @@ fun StatCard(label: String, value: Int, modifier: Modifier = Modifier) {
 
 @Composable
 fun ProgressCard(title: String, current: Int, total: Int, label: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
-        shape = RoundedCornerShape(12.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold)
-                Text("$current / $total", color = Color(0xFFBB86FC), fontWeight = FontWeight.Black)
+                Text("$current / $total", color = ChromeSilver, fontWeight = FontWeight.Black)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { (current.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-                color = Color(0xFFBB86FC),
-                trackColor = Color.Black.copy(alpha = 0.3f)
+            Spacer(modifier = Modifier.height(12.dp))
+            ExorkNeumorphicProgressBar(
+                progress = (current.toFloat() / total.toFloat()).coerceIn(0f, 1f),
+                subLabel = label
             )
-            Text(label, color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -235,20 +228,17 @@ fun ProgressCard(title: String, current: Int, total: Int, label: String) {
 @Composable
 fun AchievementSummary(highestBadge: Badge?, user: User) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("ACHIEVEMENTS", color = Color(0xFFBB86FC), fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
+        Text("ACHIEVEMENTS", color = ChromeSilver, fontWeight = FontWeight.Black, letterSpacing = 2.sp, fontSize = 14.sp)
         
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1B4E).copy(alpha = 0.3f)),
-            shape = RoundedCornerShape(16.dp),
-            border = borderStroke(highestBadge != null)
+        ExorkNeumorphicCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(60.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f), CircleShape),
+                        .background(ObsidianVoid, CircleShape)
+                        .border(1.5.dp, ChromeSilver.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("🏆", fontSize = 24.sp)
@@ -257,26 +247,23 @@ fun AchievementSummary(highestBadge: Badge?, user: User) {
                 Spacer(modifier = Modifier.width(16.dp))
                 
                 Column {
-                    Text("HIGHEST TITLE EARNED", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("HIGHEST TITLE EARNED", color = TitaniumGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Text(highestBadge?.name ?: "N/A", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    Text(user.rank.uppercase(), color = Color(0xFFBB86FC), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(user.rank.uppercase(), color = ChromeSilver, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
 
         if (user.activeTitle != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFD700).copy(alpha = 0.1f)),
-                shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f))
+            ExorkNeumorphicCard(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(60.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f), CircleShape),
+                            .background(ObsidianVoid, CircleShape)
+                            .border(1.5.dp, ChromeSilver.copy(alpha = 0.8f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("📜", fontSize = 24.sp)
@@ -285,8 +272,8 @@ fun AchievementSummary(highestBadge: Badge?, user: User) {
                     Spacer(modifier = Modifier.width(16.dp))
                     
                     Column {
-                        Text("EQUIPPED STREAK TITLE", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text(user.activeTitle.uppercase(), color = Color(0xFFFFD700), fontSize = 18.sp, fontWeight = FontWeight.Black)
+                        Text("EQUIPPED STREAK TITLE", color = TitaniumGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(user.activeTitle.uppercase(), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }
@@ -294,9 +281,3 @@ fun AchievementSummary(highestBadge: Badge?, user: User) {
     }
 }
 
-@Composable
-private fun borderStroke(hasBadge: Boolean) = if (hasBadge) {
-    androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f))
-} else {
-    androidx.compose.foundation.BorderStroke(1.dp, Color.Transparent)
-}

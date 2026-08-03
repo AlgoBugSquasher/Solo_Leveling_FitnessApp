@@ -1,0 +1,4 @@
+- [x] Update `FitnessRepository.kt` to use proper suspend methods
+- [x] Refactor `HomeViewModel.kt` export/import logic for background execution
+- [x] Update `SettingsScreen.kt` to handle suspend export calls
+- [x] Verify build and functionality

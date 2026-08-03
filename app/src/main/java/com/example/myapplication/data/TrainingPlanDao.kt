@@ -40,5 +40,17 @@ interface TrainingPlanDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWeeklyBonus(bonus: WeeklyBonusEntity)
+
+    @Query("DELETE FROM training_plan_table")
+    suspend fun deleteAllTrainingDays()
+
+    @Query("DELETE FROM planned_exercise_table")
+    suspend fun deleteAllPlannedExercises()
+
+    @Query("DELETE FROM weekly_bonus_table")
+    suspend fun deleteWeeklyBonus()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlannedExercises(exercises: List<PlannedExercise>)
 }
 

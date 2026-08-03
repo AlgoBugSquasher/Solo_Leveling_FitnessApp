@@ -10,8 +10,10 @@ import com.example.myapplication.model.BadgeRarity
 class SoundManager private constructor(context: Context) {
     private val soundPool: SoundPool
     private val sounds = mutableMapOf<String, Int>()
+    private val rawResIds = mutableMapOf<String, Int>()
     private val loadedSounds = mutableSetOf<Int>()
     private var isEnabled = true
+    private val context: Context = context.applicationContext
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -43,12 +45,16 @@ class SoundManager private constructor(context: Context) {
         loadSound(context, "badge_rare", R.raw.badge_rare)
         loadSound(context, "badge_epic", R.raw.badge_epic)
         loadSound(context, "badge_legendary", R.raw.badge_legendary)
+        loadSound(context, "system_popup", R.raw.system_popup)
+        loadSound(context, "system_accept", R.raw.system_accept)
+        loadSound(context, "system_decline", R.raw.system_decline)
     }
 
     private fun loadSound(context: Context, key: String, resId: Int) {
         try {
             val id = soundPool.load(context, resId, 1)
             sounds[key] = id
+            rawResIds[key] = resId
         } catch (e: Exception) {
             Log.e("SoundManager", "Error loading sound $key: ${e.message}")
         }
@@ -65,10 +71,23 @@ class SoundManager private constructor(context: Context) {
             if (loadedSounds.contains(id)) {
                 soundPool.play(id, 1f, 1f, 1, 0, 1f)
             } else {
-                Log.w("SoundManager", "Attempted To Play Before Loaded: $key (ID $id)")
+                Log.w("SoundManager", "Sound not loaded yet: $key. Falling back to MediaPlayer.")
+                playFallback(key)
             }
         } else {
             Log.w("SoundManager", "Sound key not found: $key")
+        }
+    }
+
+    private fun playFallback(key: String) {
+        val resId = rawResIds[key] ?: return
+        try {
+            android.media.MediaPlayer.create(context, resId).apply {
+                setOnCompletionListener { release() }
+                start()
+            }
+        } catch (e: Exception) {
+            Log.e("SoundManager", "MediaPlayer fallback failed for $key: ${e.message}")
         }
     }
 
@@ -87,6 +106,10 @@ class SoundManager private constructor(context: Context) {
             BadgeRarity.LEGENDARY -> play("badge_legendary")
         }
     }
+
+    fun playSystemPopupSound() = play("system_popup")
+    fun playSystemAcceptSound() = play("system_accept")
+    fun playSystemDeclineSound() = play("system_decline")
 
     companion object {
         @Volatile

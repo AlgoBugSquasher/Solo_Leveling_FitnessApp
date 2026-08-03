@@ -1,0 +1,6 @@
+- [x] Redesign About Screen (Shadow Monarch Aesthetic)
+    - [x] Update header with `ic_launcher_monarch` and "eXork" title
+    - [x] Refine Mission card content
+    - [x] Style Credits and Social sections
+    - [x] Update footer
+- [x] Build and verify project

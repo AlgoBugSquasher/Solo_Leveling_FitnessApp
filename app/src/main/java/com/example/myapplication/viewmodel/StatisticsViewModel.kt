@@ -26,4 +26,7 @@ class StatisticsViewModel(private val repository: FitnessRepository) : ViewModel
     val highestBadge: StateFlow<Badge?> = unlockedBadges
         .map { it.maxByOrNull { b -> b.requiredLevel } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val weeklyXp: StateFlow<Int> = repository.getWeeklyXp()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 }

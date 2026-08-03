@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.model.Achievement
 import com.example.myapplication.model.AchievementData
 import com.example.myapplication.model.User
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.AchievementViewModel
 
@@ -43,10 +44,6 @@ fun AchievementArchiveScreen(
     val user by viewModel.user.collectAsState()
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
 
     Scaffold(
         topBar = {
@@ -63,18 +60,22 @@ fun AchievementArchiveScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             user?.let { currentUser ->
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(1),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(
+                        top = 16.dp,
+                        bottom = 120.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(AchievementData.allAchievements) { achievement ->
@@ -91,37 +92,11 @@ fun AchievementCard(achievement: Achievement, user: User) {
     val isUnlocked = achievement.isUnlocked(user)
     val progress = achievement.getProgress(user)
     
-    val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                brush = if (isUnlocked) {
-                    Brush.sweepGradient(listOf(Color(0xFFBB86FC), Color(0xFF03DAC6), Color(0xFFBB86FC)))
-                } else {
-                    Brush.verticalGradient(listOf(Color.Gray.copy(alpha = 0.3f), Color.Transparent))
-                },
-                shape = RoundedCornerShape(16.dp)
-            ),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isUnlocked) Color(0xFF2D1B4E).copy(alpha = 0.6f) else Color(0xFF121212).copy(alpha = 0.8f)
-        ),
-        shape = RoundedCornerShape(16.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .padding(16.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -130,8 +105,13 @@ fun AchievementCard(achievement: Achievement, user: User) {
                 modifier = Modifier
                     .size(60.dp)
                     .clip(CircleShape)
-                    .background(if (isUnlocked) Color(0xFFBB86FC).copy(alpha = 0.2f) else Color.DarkGray.copy(alpha = 0.5f))
-                    .border(1.dp, if (isUnlocked) Color(0xFFBB86FC) else Color.Gray.copy(alpha = 0.3f), CircleShape),
+                    .background(ObsidianVoid)
+                    .border(
+                        1.5.dp,
+                        if (isUnlocked) Brush.sweepGradient(listOf(ChromeSilver, DarkSteel, ChromeSilver))
+                        else Brush.verticalGradient(listOf(Color.Gray.copy(alpha = 0.3f), Color.Transparent)),
+                        CircleShape
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -139,18 +119,6 @@ fun AchievementCard(achievement: Achievement, user: User) {
                     fontSize = 32.sp,
                     modifier = Modifier.alpha(if (isUnlocked) 1f else 0.3f)
                 )
-                
-                if (isUnlocked) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.radialGradient(
-                                    listOf(Color(0xFFBB86FC).copy(alpha = 0.2f * glowAlpha), Color.Transparent)
-                                )
-                            )
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -158,51 +126,30 @@ fun AchievementCard(achievement: Achievement, user: User) {
             // Details
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isUnlocked) achievement.name.uppercase() else achievement.name.uppercase(),
+                    text = achievement.name.uppercase(),
                     color = if (isUnlocked) Color.White else Color.Gray,
                     style = TextStyle(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
-                        shadow = if (isUnlocked) Shadow(Color(0xFFBB86FC), blurRadius = 10f) else null
+                        shadow = if (isUnlocked) Shadow(Color.Black, blurRadius = 10f) else null
                     )
                 )
                 
                 Text(
                     text = achievement.description,
-                    color = if (isUnlocked) Color.LightGray else Color.Gray.copy(alpha = 0.6f),
+                    color = if (isUnlocked) TitaniumGray else Color.Gray.copy(alpha = 0.6f),
                     fontSize = 12.sp,
                     lineHeight = 16.sp
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Progress Bar
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "${achievement.getCurrentValue(user)} / ${achievement.targetValue}",
-                            color = if (isUnlocked) Color(0xFF03DAC6) else Color.Gray,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (isUnlocked) {
-                            Text("COMPLETED", color = Color(0xFF03DAC6), fontSize = 10.sp, fontWeight = FontWeight.Black)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(CircleShape),
-                        color = if (isUnlocked) Color(0xFFBB86FC) else Color.Gray.copy(alpha = 0.4f),
-                        trackColor = Color.Black.copy(alpha = 0.3f)
-                    )
-                }
+                ExorkNeumorphicProgressBar(
+                    progress = progress,
+                    label = "${achievement.getCurrentValue(user)} / ${achievement.targetValue}",
+                    subLabel = if (isUnlocked) "COMPLETED" else null
+                )
             }
         }
     }

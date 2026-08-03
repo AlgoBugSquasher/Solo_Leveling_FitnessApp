@@ -14,4 +14,7 @@ interface TitleDao {
 
     @Update
     suspend fun updateTitle(title: Title)
+
+    @Query("DELETE FROM title_table")
+    suspend fun deleteAllTitles()
 }

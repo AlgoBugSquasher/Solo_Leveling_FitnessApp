@@ -1,0 +1,8 @@
+- `[x]` Implement `getWeeklyXp` in `FitnessRepository.kt`
+- `[x]` Expose `weeklyXp` in `HomeViewModel.kt`
+- `[x]` Expose `weeklyXp` in `StatisticsViewModel.kt`
+- `[x]` Update `HomeScreen.kt`: bind `weeklyXp` and remove hardcoded "1,240"
+- `[x]` Update `HomeScreen.kt`: replace "GOD OF WIND" achievement preview with real latest achievement
+- `[x]` Update `StatisticsScreen.kt`: display `weeklyXp` and verify data bindings
+- `[x]` Global scan for remaining hardcoded demo/sample data
+- `[x]` Verification of data consistency across screens

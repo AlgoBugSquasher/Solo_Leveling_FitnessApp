@@ -113,8 +113,14 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
                 val name = exercise.name.lowercase().trim()
                 
                 viewModelScope.launch {
-                    if (repository.getEventCountByType("FIRST_TRAINING_PLAN_EXERCISE") == 0) {
-                        repository.recordJourneyEvent("FIRST_TRAINING_PLAN_EXERCISE", "FIRST PLAN COMPLETED", "Successfully finished a planned training item.", "📋")
+                    if (repository.getEventCountByType(com.example.myapplication.model.JourneyEventType.TRAINING) == 0) {
+                        repository.recordJourneyEvent(
+                            eventType = com.example.myapplication.model.JourneyEventType.TRAINING,
+                            title = "FIRST PLAN COMPLETED",
+                            description = "Successfully finished a planned training item.",
+                            icon = "📋",
+                            rarity = com.example.myapplication.model.JourneyRarity.COMMON
+                        )
                     }
                 }
 
@@ -235,8 +241,14 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
                 repository.recordProgress(xpGained = 1000)
                 repository.updateWeeklyBonus(WeeklyBonusEntity(id = 0, lastBonusWeek = currentWeek, lastBonusYear = currentYear))
                 
-                if (repository.getEventCountByType("FIRST_WEEKLY_COMPLETION") == 0) {
-                    repository.recordJourneyEvent("FIRST_WEEKLY_COMPLETION", "WEEKLY REGIMEN COMPLETE", "A full week of discipline.", "🌟")
+                if (repository.getEventCountByType(com.example.myapplication.model.JourneyEventType.TRAINING) == 0) {
+                    repository.recordJourneyEvent(
+                        eventType = com.example.myapplication.model.JourneyEventType.TRAINING,
+                        title = "WEEKLY REGIMEN COMPLETE",
+                        description = "A full week of discipline.",
+                        icon = "🌟",
+                        rarity = com.example.myapplication.model.JourneyRarity.EPIC
+                    )
                 }
 
                 _showBonusDialog.emit(true)

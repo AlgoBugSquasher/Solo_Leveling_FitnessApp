@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.model.Ability
 import com.example.myapplication.model.User
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.viewmodel.AbilityViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,21 +38,28 @@ fun AbilityScreen(viewModel: AbilityViewModel, onNavigateBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Abilities") },
+                title = { Text("Abilities", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        }
+        },
+        containerColor = ObsidianVoid
     ) { padding ->
         user?.let { currentUser ->
             LazyColumn(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(
+                    top = 16.dp,
+                    bottom = 120.dp,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(abilities) { ability ->
@@ -59,58 +67,44 @@ fun AbilityScreen(viewModel: AbilityViewModel, onNavigateBack: () -> Unit) {
                 }
             }
         } ?: Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(color = ChromeSilver)
         }
     }
 }
 
 @Composable
 fun AbilityRow(ability: Ability, user: User) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (ability.isUnlocked) Color(0xFF2D1B4E) else Color(0xFF1E1E1E),
-        animationSpec = tween(1000),
-        label = "AbilityBackground"
-    )
-
-    val borderColor by animateColorAsState(
-        targetValue = if (ability.isUnlocked) Color(0xFFBB86FC) else Color.Transparent,
-        animationSpec = tween(1000),
-        label = "AbilityBorder"
-    )
-
-    Card(
+    ExorkNeumorphicCard(
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                width = if (ability.isUnlocked) 2.dp else 0.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(12.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        shape = RoundedCornerShape(12.dp)
+            .then(
+                if (ability.isUnlocked) Modifier.border(1.5.dp, ChromeSilver, RoundedCornerShape(20.dp))
+                else Modifier
+            )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = ability.name,
+                    text = ability.name.uppercase(),
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (ability.isUnlocked) Color.White else Color.Gray
+                    fontWeight = FontWeight.Black,
+                    color = if (ability.isUnlocked) Color.White else Color.Gray,
+                    letterSpacing = 1.sp
                 )
                 Text(
                     text = if (ability.isUnlocked) "UNLOCKED" else "LOCKED",
-                    color = if (ability.isUnlocked) Color(0xFFBB86FC) else Color.DarkGray,
+                    color = if (ability.isUnlocked) ChromeSilver else TitaniumGray,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp
                 )
             }
 
             if (!ability.isUnlocked) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 RequirementProgress("Push-ups", user.pushups, ability.requiredPushups)
                 RequirementProgress("Pull-ups", user.pullups, ability.requiredPullups)
                 RequirementProgress("Plank Time", user.plankTime, ability.requiredPlankTime)
@@ -124,23 +118,24 @@ fun AbilityRow(ability: Ability, user: User) {
 @Composable
 fun RequirementProgress(label: String, current: Int, required: Int) {
     if (required > 0) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = label, fontSize = 14.sp)
-            Text(
-                text = "$current / $required",
-                fontSize = 14.sp,
-                color = if (current >= required) Color(0xFF2E7D32) else Color.Red
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(text = label, fontSize = 12.sp, color = TitaniumGray, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "$current / $required",
+                    fontSize = 12.sp,
+                    color = if (current >= required) Color.White else TitaniumGray,
+                    fontWeight = FontWeight.Black
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            ExorkNeumorphicProgressBar(
+                progress = (current.toFloat() / required.toFloat()).coerceIn(0f, 1f)
             )
         }
-        LinearProgressIndicator(
-            progress = { (current.toFloat() / required.toFloat()).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-            color = if (current >= required) Color(0xFFBB86FC) else Color(0xFF3700B3),
-            trackColor = Color.Black.copy(alpha = 0.3f)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
     }
 }

@@ -40,6 +40,7 @@ import com.example.myapplication.model.ExerciseCategory
 import com.example.myapplication.model.ExerciseTrackingType
 import com.example.myapplication.ui.components.ExerciseTimerDialog
 import com.example.myapplication.ui.components.ExerciseStopwatchDialog
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.WorkoutViewModel
 import androidx.compose.material.icons.filled.Timer
@@ -73,22 +74,18 @@ fun WorkoutScreen(
         }
     }
 
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF050505), Color(0xFF121212))
-    )
-
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = ObsidianVoid,
         topBar = {
             TopAppBar(
                 title = { 
                     Text(
                         "SYSTEM LOG: WORKOUT", 
                         style = TextStyle(
-                            color = Color(0xFFFFD700), 
+                            color = Color.White, 
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp,
-                            shadow = Shadow(Color(0xFFFFD700).copy(alpha = 0.5f), blurRadius = 10f)
+                            shadow = Shadow(Color.Black.copy(alpha = 0.5f), blurRadius = 10f)
                         )
                     ) 
                 },
@@ -106,7 +103,6 @@ fun WorkoutScreen(
     ) { innerPadding ->
         Box(modifier = Modifier
             .fillMaxSize()
-            .background(backgroundBrush)
             .padding(innerPadding)
         ) {
             Column(
@@ -125,14 +121,14 @@ fun WorkoutScreen(
 
                 Text(
                     "PENDING DATA", 
-                    color = Color.Gray, 
+                    color = TitaniumGray, 
                     style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 )
 
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    contentPadding = PaddingValues(bottom = 120.dp)
                 ) {
                     items(exercises, key = { it.hashCode() }) { exercise ->
                         ExerciseEntryItem(
@@ -151,34 +147,14 @@ fun WorkoutScreen(
                     }
                 }
 
-                AnimatedButton(
+                ExorkChromeButton(
+                    text = "UPLOAD PROGRESS",
                     onClick = { 
                         soundManager.playClick()
                         viewModel.completeWorkout() 
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp),
-                    enabled = exercises.isNotEmpty()
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = if (exercises.isNotEmpty()) Color(0xFFFFD700) else Color.DarkGray,
-                        shape = RoundedCornerShape(12.dp),
-                        shadowElevation = 8.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                "UPLOAD PROGRESS", 
-                                style = TextStyle(
-                                    fontSize = 18.sp, 
-                                    fontWeight = FontWeight.Black, 
-                                    color = if (exercises.isNotEmpty()) Color.Black else Color.Gray
-                                )
-                            )
-                        }
-                    }
-                }
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // XP Celebration Overlay
@@ -202,7 +178,7 @@ fun WorkoutScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             "DATA RECORDED",
-                            color = Color(0xFFFFD700),
+                            color = ElectricCyan,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp,
                             fontSize = 14.sp
@@ -214,7 +190,7 @@ fun WorkoutScreen(
                             style = TextStyle(
                                 fontSize = 42.sp,
                                 fontWeight = FontWeight.Black,
-                                shadow = Shadow(Color(0xFFFFD700), blurRadius = 20f)
+                                shadow = Shadow(ElectricCyan, blurRadius = 20f)
                             )
                         )
                     }
@@ -262,40 +238,48 @@ fun ExerciseCreationCard(onAdd: (String, ExerciseCategory, ExerciseTrackingType,
     var seconds by remember { mutableStateOf("") }
     var distance by remember { mutableStateOf("") }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.8f)),
-        shape = RoundedCornerShape(16.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 "NEW ENTRY", 
-                color = Color(0xFFFFD700), 
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                color = Color.White, 
+                style = TextStyle(
+                    fontSize = 12.sp, 
+                    fontWeight = FontWeight.Black, 
+                    letterSpacing = 2.sp,
+                    shadow = Shadow(Color.Black, blurRadius = 8f)
+                )
             )
 
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Exercise Name", color = Color.Gray) },
+                label = { Text("Exercise Name", color = TitaniumGray) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
-                    focusedBorderColor = Color(0xFFFFD700),
-                    unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f),
-                    cursorColor = Color(0xFFFFD700)
+                    focusedContainerColor = ObsidianVoid,
+                    unfocusedContainerColor = ObsidianVoid,
+                    focusedBorderColor = ChromeSilver,
+                    unfocusedBorderColor = Color(0xFF3A3A3E),
+                    cursorColor = ChromeSilver
                 ),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
 
-            Text("CATEGORY", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            Text(
+                "CATEGORY", 
+                color = ChromeSilver, 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Black,
+                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 4f))
+            )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 ExerciseChip("PUSHUPS", category == ExerciseCategory.PUSHUPS, Modifier.weight(1f)) { category = ExerciseCategory.PUSHUPS }
                 ExerciseChip("PULLUPS", category == ExerciseCategory.PULLUPS, Modifier.weight(1f)) { category = ExerciseCategory.PULLUPS }
@@ -304,7 +288,13 @@ fun ExerciseCreationCard(onAdd: (String, ExerciseCategory, ExerciseTrackingType,
                 ExerciseChip("OTHER", category == ExerciseCategory.OTHER, Modifier.weight(1f)) { category = ExerciseCategory.OTHER }
             }
 
-            Text("TRACKING TYPE", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Black)
+            Text(
+                "TRACKING TYPE", 
+                color = ChromeSilver, 
+                fontSize = 10.sp, 
+                fontWeight = FontWeight.Black,
+                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 4f))
+            )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ExerciseChip("REPS", trackingType == ExerciseTrackingType.REPS, Modifier.weight(1f)) { trackingType = ExerciseTrackingType.REPS }
                 ExerciseChip("SECONDS", trackingType == ExerciseTrackingType.SECONDS, Modifier.weight(1f)) { trackingType = ExerciseTrackingType.SECONDS }
@@ -327,7 +317,8 @@ fun ExerciseCreationCard(onAdd: (String, ExerciseCategory, ExerciseTrackingType,
                 }
             }
 
-            Button(
+            ExorkChromeButton(
+                text = "ADD TO RECORD",
                 onClick = {
                     if (name.isNotBlank()) {
                         onAdd(
@@ -346,17 +337,9 @@ fun ExerciseCreationCard(onAdd: (String, ExerciseCategory, ExerciseTrackingType,
                         distance = ""
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
-                shape = RoundedCornerShape(12.dp),
-                enabled = name.isNotBlank() && (reps.isNotBlank() || seconds.isNotBlank() || distance.isNotBlank() || sets.isNotBlank())
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("ADD TO RECORD", color = Color.Black, fontWeight = FontWeight.ExtraBold)
-            }
+                modifier = Modifier.fillMaxWidth(),
+                height = 52.dp
+            )
         }
     }
 }
@@ -366,14 +349,18 @@ fun ExerciseChip(label: String, selected: Boolean, modifier: Modifier = Modifier
     Surface(
         onClick = onClick,
         modifier = modifier.height(32.dp),
-        color = if (selected) Color(0xFFFFD700) else Color(0xFF1A1A1A),
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, if (selected) Color(0xFFFFD700) else Color.Gray.copy(alpha = 0.3f))
+        color = if (selected) Color.Transparent else ObsidianVoid,
+        border = if (selected) null else BorderStroke(1.dp, TitaniumGray.copy(alpha = 0.2f)),
+        shadowElevation = if (selected) 4.dp else 0.dp
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = if (selected) Modifier.background(Brush.verticalGradient(listOf(ChromeSilver, TitaniumGray))) else Modifier,
+            contentAlignment = Alignment.Center
+        ) {
             Text(
                 text = label,
-                color = if (selected) Color.Black else Color.Gray,
+                color = if (selected) ObsidianVoid else TitaniumGray,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Black
             )
@@ -392,15 +379,17 @@ fun WorkoutCompactInput(label: String, value: String, onValueChange: (String) ->
                 if (input.all { it.isDigit() }) onValueChange(input)
             }
         },
-        label = { Text(label, color = Color.Gray, fontSize = 10.sp) },
+        label = { Text(label, color = TitaniumGray, fontSize = 10.sp) },
         modifier = modifier,
         keyboardOptions = KeyboardOptions(keyboardType = if (isDecimal) KeyboardType.Decimal else KeyboardType.Number),
         singleLine = true,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = Color.White,
             unfocusedTextColor = Color.White,
-            focusedBorderColor = Color(0xFFFFD700),
-            unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
+            focusedContainerColor = ObsidianVoid,
+            unfocusedContainerColor = ObsidianVoid,
+            focusedBorderColor = ChromeSilver,
+            unfocusedBorderColor = Color(0xFF3A3A3E)
         ),
         shape = RoundedCornerShape(12.dp)
     )
@@ -416,14 +405,11 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut()
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f)), RoundedCornerShape(12.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.5f))
+        ExorkNeumorphicCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -441,7 +427,7 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
                     }
                     Text(
                         detailText,
-                        color = Color(0xFFFFD700),
+                        color = ChromeSilver,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -451,7 +437,7 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
                         val timerLabel = if (exercise.trackingType == ExerciseTrackingType.DISTANCE) "START RUN" else "START TIMER"
                         TextButton(
                             onClick = onStartTimer,
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBB86FC)),
+                            colors = ButtonDefaults.textButtonColors(contentColor = ChromeSilver),
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
                             Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -475,40 +461,3 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
 
 private fun android.view.animation.Interpolator.toEasing() = Easing { x -> getInterpolation(x) }
 
-@Composable
-fun AnimatedButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "ButtonScale"
-    )
-
-    Box(
-        modifier = modifier
-            .graphicsLayer(scaleX = scale, scaleY = scale)
-            .pointerInput(enabled) {
-                if (enabled) {
-                    detectTapGestures(
-                        onPress = {
-                            isPressed = true
-                            try {
-                                awaitRelease()
-                            } finally {
-                                isPressed = false
-                            }
-                        },
-                        onTap = { onClick() }
-                    )
-                }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
-}

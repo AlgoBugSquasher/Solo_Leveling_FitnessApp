@@ -28,4 +28,10 @@ interface WorkoutDao {
     @Transaction
     @Query("SELECT * FROM workout_table ORDER BY date DESC")
     fun getAllWorkouts(): Flow<List<WorkoutWithExercises>>
+
+    @Query("DELETE FROM workout_table")
+    suspend fun deleteAllWorkouts()
+
+    @Query("DELETE FROM exercise_table")
+    suspend fun deleteAllExercises()
 }

@@ -5,8 +5,10 @@ import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -24,11 +26,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.R
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,17 +43,13 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     val soundManager = remember { SoundManager.getInstance(context) }
     
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
-
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("About", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text("About System", color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = {
                         soundManager.playClick()
@@ -60,59 +61,68 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             AnimatedVisibility(
                 visible = isVisible,
-                enter = fadeIn(tween(1000)) + slideInVertically(tween(1000)) { it / 10 }
+                enter = fadeIn(tween(1000)) + scaleIn(tween(1000, easing = androidx.compose.animation.core.FastOutSlowInEasing), initialScale = 0.9f)
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(24.dp),
+                    contentPadding = PaddingValues(
+                        top = 24.dp,
+                        bottom = 120.dp,
+                        start = 24.dp,
+                        end = 24.dp
+                    ),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     // App Logo & Name
                     item {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .shadow(20.dp, CircleShape, spotColor = Color(0xFFBB86FC))
-                                    .background(Color(0xFF2D1B4E), CircleShape)
-                                    .border(2.dp, Color(0xFFBB86FC), CircleShape),
-                                contentAlignment = Alignment.Center
+                            ExorkNeumorphicCard(
+                                modifier = Modifier.size(110.dp),
+                                cornerRadius = 55.dp
                             ) {
-                                Text(
-                                    "⚡",
-                                    fontSize = 48.sp,
-                                    style = TextStyle(shadow = Shadow(Color(0xFFBB86FC), blurRadius = 20f))
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_launcher_monarch),
+                                        contentDescription = "eXork Logo",
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                }
                             }
                             
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(20.dp))
                             
                             Text(
-                                "SOLO LEVELING FITNESS",
+                                "eXork",
                                 color = Color.White,
                                 style = TextStyle(
-                                    fontSize = 28.sp,
+                                    fontSize = 36.sp,
                                     fontWeight = FontWeight.Black,
-                                    letterSpacing = 2.sp,
-                                    shadow = Shadow(Color(0xFFBB86FC), blurRadius = 15f)
+                                    letterSpacing = 4.sp,
+                                    shadow = Shadow(Color.Black, blurRadius = 20f)
                                 )
                             )
                             
                             Text(
-                                "Version 2.1.0",
-                                color = Color.Gray,
-                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                "Version 3.1.0 - SYSTEM ACTIVE",
+                                color = TitaniumGray,
+                                style = TextStyle(
+                                    fontSize = 13.sp, 
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
                             )
                         }
                     }
@@ -120,8 +130,8 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
                     // Description Card
                     item {
                         AboutInfoCard(
-                            title = "MISSION",
-                            content = "A Solo Leveling inspired fitness RPG where users level up, complete quests, earn achievements, unlock titles, and rise through the hunter ranks."
+                            title = "SYSTEM PROTOCOL",
+                            content = "An advanced Hunter RPG interface powered by eXork system protocols. Level up, complete daily quests, earn achievements, and rise through the hunter ranks."
                         )
                     }
 
@@ -130,7 +140,7 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             SectionTitle("THE ARCHITECTS")
                             
-                            CreditItem(role = "Developer", name = "OM KRISHALI", color = Color(0xFFBB86FC))
+                            CreditItem(role = "Developer", name = "OM KRISHALI", color = ElectricCyan)
                             CreditItem(role = "Tester", name = "Ashu [ Player E1 ]", color = Color(0xFF03DAC6))
                         }
                     }
@@ -166,12 +176,17 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
 
                     // Footer
                     item {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(32.dp))
                         Text(
                             "© 2026 OM KRISHALI",
-                            color = Color.Gray.copy(alpha = 0.5f),
-                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                            color = Color.Gray.copy(alpha = 0.4f),
+                            style = TextStyle(
+                                fontSize = 11.sp, 
+                                fontWeight = FontWeight.Black, 
+                                letterSpacing = 2.sp
+                            )
                         )
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }
@@ -183,41 +198,37 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
 fun SectionTitle(text: String) {
     Text(
         text = text,
-        color = Color(0xFFBB86FC),
+        color = ChromeSilver,
         style = TextStyle(
-            fontSize = 16.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 4.sp,
-            shadow = Shadow(Color(0xFFBB86FC).copy(alpha = 0.5f), blurRadius = 10f)
+            shadow = Shadow(Color.Black, blurRadius = 10f)
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
         textAlign = TextAlign.Start
     )
 }
 
 @Composable
 fun AboutInfoCard(title: String, content: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1B4E).copy(alpha = 0.3f)),
-        shape = RoundedCornerShape(16.dp)
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column {
             Text(
                 title,
-                color = Color(0xFFBB86FC),
+                color = ChromeSilver,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 2.sp
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 content,
-                color = Color.LightGray,
+                color = TitaniumGray,
                 fontSize = 15.sp,
-                lineHeight = 22.sp,
+                lineHeight = 24.sp,
                 textAlign = TextAlign.Justify
             )
         }
@@ -226,43 +237,37 @@ fun AboutInfoCard(title: String, content: String) {
 
 @Composable
 fun CreditItem(role: String, name: String, color: Color) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f))
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(role.uppercase(), color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(name, color = color, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            Text(role.uppercase(), color = TitaniumGray, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(name, color = color, fontSize = 16.sp, fontWeight = FontWeight.Black)
         }
     }
 }
 
 @Composable
 fun SocialLinkItem(platform: String, handle: String, url: String, color: Color, onOpen: (String) -> Unit) {
-    Card(
-        onClick = { onOpen(url) },
+    ExorkNeumorphicCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        onClick = { onOpen(url) }
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(platform, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(handle, color = Color.Gray, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(platform, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            }
+            Text(handle, color = TitaniumGray, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

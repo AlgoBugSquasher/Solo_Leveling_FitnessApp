@@ -4,9 +4,12 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import kotlinx.coroutines.delay
 
@@ -47,6 +51,7 @@ fun ExerciseTimerDialog(
     var isResting by remember { mutableStateOf(false) }
     
     val restDuration = 30
+    val scrollState = rememberScrollState()
     
     LaunchedEffect(isRunning, timeLeft) {
         if (isRunning && timeLeft > 0) {
@@ -82,16 +87,19 @@ fun ExerciseTimerDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.98f))
+                .background(ObsidianVoid.copy(alpha = 0.96f))
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize().padding(24.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .verticalScroll(scrollState)
             ) {
                 Text(
                     text = "SET $currentSet / $totalSets",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = TitaniumGray,
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
                 )
                 
@@ -99,21 +107,21 @@ fun ExerciseTimerDialog(
                 
                 Text(
                     text = exerciseName.uppercase(),
-                    color = Color(0xFFBB86FC),
+                    color = Color.White,
                     style = TextStyle(
-                        fontSize = 32.sp, 
+                        fontSize = if (isTimerComplete) 24.sp else 32.sp, 
                         fontWeight = FontWeight.Black, 
                         letterSpacing = 2.sp,
-                        shadow = Shadow(Color(0xFFBB86FC).copy(alpha = 0.5f), blurRadius = 15f)
+                        shadow = Shadow(Color.Black, blurRadius = 15f)
                     ),
                     textAlign = TextAlign.Center
                 )
                 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(if (isTimerComplete) 20.dp else 60.dp))
                 
                 // Large Countdown with Ring
+                val ringSize by animateDpAsState(targetValue = if (isTimerComplete) 180.dp else 300.dp, label = "ringSize")
                 Box(contentAlignment = Alignment.Center) {
-                    val themeColor = if (isResting) Color(0xFF03DAC6) else Color(0xFFBB86FC)
                     val targetProgress = timeLeft.toFloat() / (if (isResting) restDuration else initialSeconds).toFloat()
                     
                     val animatedProgress by animateFloatAsState(
@@ -121,67 +129,74 @@ fun ExerciseTimerDialog(
                         animationSpec = tween(1000, easing = LinearEasing), label = "progress"
                     )
 
-                    // Outer Glow Ring
+                    // Outer Recessed Track
                     Box(
                         modifier = Modifier
-                            .size(300.dp)
+                            .size(ringSize)
                             .drawBehind {
                                 drawCircle(
-                                    color = themeColor.copy(alpha = if (timeLeft <= 5 && isRunning) 0.15f else 0.05f),
+                                    color = Color.White.copy(alpha = 0.05f),
                                     radius = size.minDimension / 2,
-                                    style = Stroke(width = 40.dp.toPx())
+                                    style = Stroke(width = 4.dp.toPx())
                                 )
                             }
                     )
                     
-                    CircularProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.size(280.dp),
-                        color = themeColor,
-                        strokeWidth = 8.dp,
-                        trackColor = Color.White.copy(alpha = 0.05f),
-                        strokeCap = StrokeCap.Round
+                    // 3D Metallic Progress Ring
+                    Box(
+                        modifier = Modifier
+                            .size(ringSize - 20.dp)
+                            .drawBehind {
+                                drawArc(
+                                    brush = Brush.sweepGradient(
+                                        listOf(ChromeSilver, DarkSteel, MutedSlate, ChromeSilver)
+                                    ),
+                                    startAngle = -90f,
+                                    sweepAngle = 360f * animatedProgress,
+                                    useCenter = false,
+                                    style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+                                )
+                            }
                     )
                     
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.scale(pulseScale)
+                        modifier = Modifier.scale(if (isTimerComplete) pulseScale * 0.7f else pulseScale)
                     ) {
                         Text(
                             text = timeLeft.toString(),
                             color = if (timeLeft <= 5 && !isResting) Color.Red else Color.White,
                             style = TextStyle(
-                                fontSize = 110.sp, 
+                                fontSize = if (isTimerComplete) 60.sp else 110.sp, 
                                 fontWeight = FontWeight.Black,
                                 shadow = Shadow(
-                                    color = if (timeLeft <= 5 && !isResting) Color.Red.copy(alpha = 0.6f) else themeColor.copy(alpha = 0.4f), 
+                                    color = Color.Black, 
                                     blurRadius = if (timeLeft <= 5 && isRunning) 40f else 25f
                                 )
                             )
                         )
                         Text(
                             text = if (isResting) "RESTING" else "SECONDS",
-                            color = themeColor.copy(alpha = 0.8f),
+                            color = if (isResting) ChromeSilver else TitaniumGray,
                             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                         )
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.height(if (isTimerComplete) 20.dp else 40.dp))
                 
                 Text(
                     text = "STATUS: ${if (isTimerComplete) "COMPLETE" else if (isRunning) "ACTIVE" else "PAUSED"}",
-                    color = if (isRunning) Color(0xFF03DAC6) else Color.White.copy(alpha = 0.4f),
+                    color = if (isRunning) ChromeSilver else TitaniumGray.copy(alpha = 0.6f),
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 )
 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(if (isTimerComplete) 24.dp else 60.dp))
                 
                 if (isTimerComplete) {
                     PremiumCompletionPanel(
                         title = if (isResting) "REST OVER" else "TIME COMPLETE",
                         subtitle = if (isResting) "GET READY" else "SET $currentSet COMPLETE",
-                        themeColor = Color(0xFF03DAC6),
                         onAction = {
                             soundManager.playClick()
                             if (isResting) {
@@ -210,9 +225,6 @@ fun ExerciseTimerDialog(
                     ) {
                         TimerButton(
                             text = if (isRunning) "PAUSE" else "RESUME",
-                            color = if (isRunning) Color.Transparent else Color(0xFFBB86FC),
-                            borderColor = if (isRunning) Color.Red.copy(alpha = 0.5f) else Color(0xFFBB86FC),
-                            textColor = if (isRunning) Color.Red else Color.Black,
                             modifier = Modifier.weight(1f),
                             onClick = { 
                                 soundManager.playClick()
@@ -222,9 +234,6 @@ fun ExerciseTimerDialog(
                         
                         TimerButton(
                             text = "CANCEL",
-                            color = Color.Transparent,
-                            borderColor = Color.White.copy(alpha = 0.2f),
-                            textColor = Color.White,
                             modifier = Modifier.weight(1f),
                             onClick = onDismiss
                         )
@@ -238,7 +247,7 @@ fun ExerciseTimerDialog(
                             isRunning = false
                             isTimerComplete = false
                         }) {
-                            Text("SKIP REST", color = Color(0xFF03DAC6), fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            Text("SKIP REST", color = ChromeSilver, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                         }
                     }
                 }
@@ -258,6 +267,7 @@ fun ExerciseStopwatchDialog(
     var secondsElapsed by remember { mutableIntStateOf(0) }
     var isRunning by remember { mutableStateOf(false) }
     var isFinished by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(isRunning) {
         while (isRunning) {
@@ -280,16 +290,19 @@ fun ExerciseStopwatchDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.98f))
+                .background(ObsidianVoid.copy(alpha = 0.96f))
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxSize().padding(24.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .verticalScroll(scrollState)
             ) {
                 Text(
                     text = "DISTANCE SESSION",
-                    color = Color.White.copy(alpha = 0.6f),
+                    color = TitaniumGray,
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
                 )
                 
@@ -297,12 +310,12 @@ fun ExerciseStopwatchDialog(
 
                 Text(
                     text = exerciseName.uppercase(),
-                    color = Color(0xFFFFD700),
+                    color = Color.White,
                     style = TextStyle(
-                        fontSize = 32.sp,
+                        fontSize = if (isFinished) 24.sp else 32.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp,
-                        shadow = Shadow(Color(0xFFFFD700).copy(alpha = 0.5f), blurRadius = 15f)
+                        shadow = Shadow(Color.Black, blurRadius = 15f)
                     ),
                     textAlign = TextAlign.Center
                 )
@@ -311,11 +324,11 @@ fun ExerciseStopwatchDialog(
 
                 Text(
                     text = "TARGET: $targetDistance KM",
-                    color = Color(0xFFFFD700).copy(alpha = 0.7f),
+                    color = ChromeSilver,
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 )
 
-                Spacer(modifier = Modifier.height(60.dp))
+                Spacer(modifier = Modifier.height(if (isFinished) 20.dp else 60.dp))
 
                 if (isFinished) {
                     val m = secondsElapsed / 60
@@ -323,7 +336,6 @@ fun ExerciseStopwatchDialog(
                     PremiumCompletionPanel(
                         title = "RUN COMPLETE",
                         subtitle = "DISTANCE: $targetDistance KM\nTIME: ${m}m ${s}s",
-                        themeColor = Color(0xFF03DAC6),
                         onAction = {
                             soundManager.playClick()
                             onFinish(secondsElapsed)
@@ -333,6 +345,7 @@ fun ExerciseStopwatchDialog(
                 } else {
                     // Stopwatch Display with Status Ring
                     Box(contentAlignment = Alignment.Center) {
+                        val ringSize by animateDpAsState(targetValue = 300.dp, label = "ringSize")
                         val animatedRotation by rememberInfiniteTransition().animateFloat(
                             initialValue = 0f,
                             targetValue = 360f,
@@ -344,22 +357,31 @@ fun ExerciseStopwatchDialog(
 
                         Box(
                             modifier = Modifier
-                                .size(300.dp)
+                                .size(ringSize)
                                 .drawBehind {
-                                    if (isRunning) {
-                                        drawArc(
-                                            color = Color(0xFFFFD700),
-                                            startAngle = animatedRotation,
-                                            sweepAngle = 90f,
-                                            useCenter = false,
-                                            style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-                                        )
-                                    }
                                     drawCircle(
                                         color = Color.White.copy(alpha = 0.05f),
                                         radius = size.minDimension / 2,
-                                        style = Stroke(width = 2.dp.toPx())
+                                        style = Stroke(width = 4.dp.toPx())
                                     )
+                                }
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .size(ringSize)
+                                .drawBehind {
+                                    if (isRunning) {
+                                        drawArc(
+                                            brush = Brush.sweepGradient(
+                                                listOf(ChromeSilver, DarkSteel, MutedSlate, ChromeSilver)
+                                            ),
+                                            startAngle = animatedRotation,
+                                            sweepAngle = 90f,
+                                            useCenter = false,
+                                            style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
+                                        )
+                                    }
                                 }
                         )
 
@@ -370,12 +392,12 @@ fun ExerciseStopwatchDialog(
                                 style = TextStyle(
                                     fontSize = 72.sp,
                                     fontWeight = FontWeight.Black,
-                                    shadow = Shadow(Color(0xFFFFD700).copy(alpha = 0.3f), blurRadius = 25f)
+                                    shadow = Shadow(Color.Black, blurRadius = 25f)
                                 )
                             )
                             Text(
                                 text = "ELAPSED TIME",
-                                color = Color(0xFFFFD700).copy(alpha = 0.8f),
+                                color = TitaniumGray,
                                 style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                             )
                         }
@@ -385,7 +407,7 @@ fun ExerciseStopwatchDialog(
                     
                     Text(
                         text = "STATUS: ${if (isRunning) "RUNNING" else "PAUSED"}",
-                        color = if (isRunning) Color(0xFF03DAC6) else Color.White.copy(alpha = 0.4f),
+                        color = if (isRunning) ChromeSilver else TitaniumGray.copy(alpha = 0.4f),
                         style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                     )
 
@@ -397,9 +419,6 @@ fun ExerciseStopwatchDialog(
                     ) {
                         TimerButton(
                             text = if (isRunning) "PAUSE" else if (secondsElapsed == 0) "START" else "RESUME",
-                            color = if (isRunning) Color.Transparent else Color(0xFFFFD700),
-                            borderColor = if (isRunning) Color.White.copy(alpha = 0.3f) else Color(0xFFFFD700),
-                            textColor = if (isRunning) Color.White else Color.Black,
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 soundManager.playClick()
@@ -409,9 +428,6 @@ fun ExerciseStopwatchDialog(
 
                         TimerButton(
                             text = "FINISH",
-                            color = Color(0xFF03DAC6),
-                            borderColor = Color(0xFF03DAC6),
-                            textColor = Color.Black,
                             modifier = Modifier.weight(1f),
                             enabled = secondsElapsed > 0,
                             onClick = {
@@ -425,7 +441,7 @@ fun ExerciseStopwatchDialog(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     TextButton(onClick = onDismiss) {
-                        Text("CANCEL SESSION", color = Color.Gray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Text("CANCEL SESSION", color = TitaniumGray, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                     }
                 }
             }
@@ -436,31 +452,32 @@ fun ExerciseStopwatchDialog(
 @Composable
 fun TimerButton(
     text: String,
-    color: Color,
-    borderColor: Color,
-    textColor: Color,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(60.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = color,
-            disabledContainerColor = color.copy(alpha = 0.3f)
-        ),
-        border = BorderStroke(1.dp, borderColor),
-        shape = RoundedCornerShape(12.dp),
-        enabled = enabled
-    ) {
-        Text(
-            text = text,
-            color = if (enabled) textColor else textColor.copy(alpha = 0.3f),
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 16.sp,
-            letterSpacing = 1.sp
+    Surface(
+        modifier = modifier
+            .height(48.dp)
+            .clickable(enabled = enabled) { onClick() },
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Black.copy(alpha = 0.3f),
+        border = BorderStroke(
+            1.dp,
+            Brush.linearGradient(
+                listOf(ChromeSilver, Color(0xFF4A4A50))
+            )
         )
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text.uppercase(),
+                color = if (enabled) Color.White else Color.White.copy(alpha = 0.3f),
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                letterSpacing = 1.sp
+            )
+        }
     }
 }
 
@@ -468,77 +485,54 @@ fun TimerButton(
 fun PremiumCompletionPanel(
     title: String,
     subtitle: String,
-    themeColor: Color,
     onAction: () -> Unit,
     actionText: String
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        color = Color(0xFF1A1A1A),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(2.dp, themeColor.copy(alpha = 0.5f))
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 40.dp, horizontal = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
-                tint = themeColor,
-                modifier = Modifier.size(72.dp)
+                tint = ChromeSilver,
+                modifier = Modifier.size(60.dp)
             )
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             Text(
                 text = title,
-                color = themeColor,
+                color = Color.White,
                 style = TextStyle(
-                    fontSize = 32.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 2.sp,
-                    shadow = Shadow(themeColor.copy(alpha = 0.4f), blurRadius = 20f)
+                    shadow = Shadow(Color.Black, blurRadius = 20f)
                 )
             )
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             Text(
                 text = subtitle,
-                color = Color.White.copy(alpha = 0.7f),
+                color = TitaniumGray,
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp,
+                lineHeight = 22.sp,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 15.sp
             )
             
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
-            // Clear Action Button - Replacing any hidden clickable areas
-            Button(
+            ExorkChromeButton(
+                text = actionText,
                 onClick = onAction,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = themeColor,
-                    contentColor = Color.Black
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-            ) {
-                Text(
-                    text = actionText.uppercase(),
-                    style = TextStyle(
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
-                )
-            }
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

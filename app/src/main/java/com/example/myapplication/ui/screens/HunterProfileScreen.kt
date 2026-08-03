@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +27,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.HomeViewModel
 
@@ -35,18 +35,13 @@ import com.example.myapplication.viewmodel.HomeViewModel
 @Composable
 fun HunterProfileScreen(
     viewModel: HomeViewModel,
-    onViewStatistics: () -> Unit,
-    onViewHistory: () -> Unit,
-    onViewSettings: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val user by viewModel.user.collectAsState()
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
+    val avatarUri by viewModel.avatarUri.collectAsState()
+    val avatarUpdateKey = remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     Scaffold(
         topBar = {
@@ -60,52 +55,54 @@ fun HunterProfileScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                 },
-                actions = {
-                    IconButton(onClick = {
-                        soundManager.playClick()
-                        onViewSettings()
-                    }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(24.dp),
+                contentPadding = PaddingValues(
+                    top = 24.dp,
+                    bottom = 120.dp,
+                    start = 24.dp,
+                    end = 24.dp
+                ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                // Profile Header Card
+                item {
+                    ExorkProfileHeader(
+                        user = user,
+                        avatarUri = avatarUri,
+                        updateKey = avatarUpdateKey.longValue,
+                        onAvatarClick = { /* Click handled in HomeScreen, or add logic here if needed */ }
+                    )
+                }
+
                 // Summary Card
                 item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color(0xFFBB86FC).copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1B4E).copy(alpha = 0.3f)),
-                        shape = RoundedCornerShape(16.dp)
+                    ExorkNeumorphicCard(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            modifier = Modifier.padding(24.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = user.rank.uppercase(),
-                                color = Color(0xFFBB86FC),
+                                color = ChromeSilver,
                                 style = TextStyle(
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 4.sp,
-                                    shadow = Shadow(color = Color(0xFFBB86FC), blurRadius = 15f)
+                                    shadow = Shadow(color = Color.Black, blurRadius = 15f)
                                 )
                             )
                             
@@ -113,7 +110,7 @@ fun HunterProfileScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = user.activeTitle!!.uppercase(),
-                                    color = Color(0xFFFFD700),
+                                    color = TitaniumGray,
                                     style = TextStyle(
                                         fontSize = 18.sp,
                                         fontWeight = FontWeight.Bold,
@@ -122,20 +119,20 @@ fun HunterProfileScreen(
                                 )
                             }
                             
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(20.dp))
                             
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("LEVEL", color = Color.Gray, fontSize = 12.sp)
+                                    Text("LEVEL", color = TitaniumGray, fontSize = 12.sp)
                                     Text(user.level.toString(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("RANK", color = Color.Gray, fontSize = 12.sp)
-                                    Text(user.rank.split("-")[0], color = Color(0xFFBB86FC), fontSize = 20.sp, fontWeight = FontWeight.Black)
+                                    Text("RANK", color = TitaniumGray, fontSize = 12.sp)
+                                    Text(user.rank.split("-")[0], color = ChromeSilver, fontSize = 20.sp, fontWeight = FontWeight.Black)
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("STREAK", color = Color.Gray, fontSize = 12.sp)
-                                    Text("${user.streak}d", color = Color(0xFF03DAC6), fontSize = 20.sp, fontWeight = FontWeight.Black)
+                                    Text("STREAK", color = TitaniumGray, fontSize = 12.sp)
+                                    Text("${user.streak}d", color = ChromeSilver, fontSize = 20.sp, fontWeight = FontWeight.Black)
                                 }
                             }
                         }
@@ -144,26 +141,21 @@ fun HunterProfileScreen(
 
                 // Rank Info Card
                 item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(BorderStroke(1.dp, Color(0xFFBB86FC).copy(alpha = 0.2f)), RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A).copy(alpha = 0.5f))
+                    ExorkNeumorphicCard(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("RANK", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text("RANK", color = TitaniumGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                                 Text(user.rank.uppercase(), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("PROMOTIONS", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Text(user.totalPromotions.toString(), color = Color(0xFFBB86FC), fontSize = 20.sp, fontWeight = FontWeight.Black)
+                                Text("PROMOTIONS", color = TitaniumGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text(user.totalPromotions.toString(), color = ChromeSilver, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
@@ -174,51 +166,7 @@ fun HunterProfileScreen(
                     PersonalRecordsSection(user)
                 }
 
-                // Action Buttons
-                item {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        AnimatedButton(
-                            onClick = {
-                                soundManager.playClick()
-                                onViewStatistics()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.Transparent
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("STATISTICS", fontWeight = FontWeight.Bold, color = Color(0xFFFFD700))
-                                }
-                            }
-                        }
-
-                        AnimatedButton(
-                            onClick = {
-                                soundManager.playClick()
-                                onViewHistory()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxSize(),
-                                border = BorderStroke(1.dp, Color(0xFF03DAC6).copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color.Transparent
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("HUNTER JOURNEY", fontWeight = FontWeight.Bold, color = Color(0xFF03DAC6))
-                                }
-                            }
-                        }
-                    }
-                }
+                // Action Buttons Removed: Statistics and Hunter Journey now have dedicated entry points.
                 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
@@ -237,12 +185,12 @@ fun PersonalRecordsSection(user: com.example.myapplication.model.User) {
     ) {
         Text(
             "PERSONAL RECORDS",
-            color = Color(0xFFBB86FC),
+            color = ChromeSilver,
             style = TextStyle(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 2.sp,
-                shadow = Shadow(Color(0xFFBB86FC).copy(alpha = 0.5f), blurRadius = 10f)
+                shadow = Shadow(Color.Black, blurRadius = 10f)
             )
         )
         
@@ -272,62 +220,41 @@ fun PRCard(label: String, value: Int, unit: String) {
         animationSpec = tween(2000, easing = FastOutSlowInEasing), label = ""
     )
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 8.dp,
-                shape = RoundedCornerShape(12.dp),
-                spotColor = Color(0xFFFFD700).copy(alpha = 0.2f)
-            ),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A0B2E).copy(alpha = 0.6f)),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color(0xFFFFD700).copy(alpha = 0.3f), Color.Transparent)))
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(Color(0xFFBB86FC).copy(alpha = 0.05f), Color.Transparent)
-                    )
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = label.uppercase(),
-                        color = Color.Gray,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = unit,
-                        color = Color(0xFFBB86FC).copy(alpha = 0.6f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                
+            Column {
                 Text(
-                    text = animatedValue.toString(),
-                    color = Color(0xFFFFD700),
-                    fontSize = 28.sp,
+                    text = label.uppercase(),
+                    color = TitaniumGray,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Black,
-                    style = TextStyle(
-                        shadow = Shadow(Color(0xFFFFD700).copy(alpha = 0.5f), blurRadius = 15f),
-                        letterSpacing = 1.sp
-                    )
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = unit,
+                    color = ChromeSilver.copy(alpha = 0.6f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
+            
+            Text(
+                text = animatedValue.toString(),
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Black,
+                style = TextStyle(
+                    shadow = Shadow(Color.Black, blurRadius = 15f),
+                    letterSpacing = 1.sp
+                )
+            )
         }
     }
 }

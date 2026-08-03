@@ -14,4 +14,7 @@ interface AbilityDao {
 
     @Update
     suspend fun updateAbility(ability: Ability)
+
+    @Query("DELETE FROM ability_table")
+    suspend fun deleteAllAbilities()
 }

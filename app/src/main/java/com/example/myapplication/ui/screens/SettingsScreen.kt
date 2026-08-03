@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,16 +19,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.HomeViewModel
 import com.example.myapplication.viewmodel.UiEvent
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -47,6 +55,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     var showRestoreConfirm by remember { mutableStateOf(false) }
     var pendingRestoreData by remember { mutableStateOf<String?>(null) }
@@ -55,14 +64,23 @@ fun SettingsScreen(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            try {
-                val data = viewModel.exportData()
-                context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                    OutputStreamWriter(outputStream).use { writer ->
-                        writer.write(data)
+            coroutineScope.launch {
+                try {
+                    val data = viewModel.exportData()
+                    if (data.isNotBlank()) {
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                                OutputStreamWriter(outputStream).use { writer ->
+                                    writer.write(data)
+                                }
+                            }
+                        }
+                        snackbarHostState.showSnackbar("Backup Saved Successfully")
                     }
+                } catch (e: Exception) {
+                    snackbarHostState.showSnackbar("Save Failed: ${e.message}")
                 }
-            } catch (e: Exception) {}
+            }
         }
     }
 
@@ -93,36 +111,97 @@ fun SettingsScreen(
     }
 
     if (showRestoreConfirm) {
-        AlertDialog(
+        Dialog(
             onDismissRequest = { showRestoreConfirm = false },
-            title = { Text("Restore Progress?") },
-            text = { Text("This will overwrite your current progress with the data from the backup file. This action cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingRestoreData?.let { viewModel.importData(it) }
-                    showRestoreConfirm = false
-                    pendingRestoreData = null
-                }) {
-                    Text("RESTORE", color = Color(0xFFBB86FC), fontWeight = FontWeight.Bold)
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .shadow(elevation = 24.dp, shape = RoundedCornerShape(20.dp), ambientColor = Color.Black),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xCC0D0D12),
+                border = BorderStroke(
+                    1.5.dp,
+                    Brush.linearGradient(
+                        listOf(ChromeSilver, Color(0xFF3A3A3E))
+                    )
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Restore Progress?",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp,
+                            shadow = Shadow(Color.Black, blurRadius = 8f)
+                        )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text(
+                        "This will overwrite your current progress with the data from the backup file. This action cannot be undone.",
+                        color = TitaniumGray,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // CANCEL BUTTON
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clickable { 
+                                    soundManager.playClick()
+                                    showRestoreConfirm = false 
+                                },
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color.Black.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, ChromeSilver.copy(alpha = 0.3f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("CANCEL", color = TitaniumGray, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
+                        }
+                        
+                        // RESTORE BUTTON
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .clickable {
+                                    soundManager.playSystemAcceptSound()
+                                    pendingRestoreData?.let { viewModel.importData(it) }
+                                    showRestoreConfirm = false
+                                    pendingRestoreData = null
+                                },
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color.Black.copy(alpha = 0.3f),
+                            border = BorderStroke(
+                                1.dp,
+                                Brush.linearGradient(listOf(ChromeSilver, Color(0xFF4A4A50)))
+                            )
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("RESTORE", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            }
+                        }
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { 
-                    showRestoreConfirm = false
-                    pendingRestoreData = null
-                }) {
-                    Text("CANCEL", color = Color.Gray)
-                }
-            },
-            containerColor = Color(0xFF1F1B24),
-            titleContentColor = Color.White,
-            textContentColor = Color.LightGray
-        )
+            }
+        }
     }
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(Color(0xFF0F051D), Color(0xFF1A0B2E))
-    )
 
     Scaffold(
         topBar = {
@@ -140,17 +219,21 @@ fun SettingsScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color.Transparent
+        containerColor = ObsidianVoid
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
                 .padding(padding)
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(24.dp),
+                contentPadding = PaddingValues(
+                    top = 24.dp,
+                    bottom = 120.dp,
+                    start = 24.dp,
+                    end = 24.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -227,7 +310,7 @@ fun SettingsScreen(
 fun SettingsSectionTitle(text: String) {
     Text(
         text = text,
-        color = Color(0xFFBB86FC),
+        color = ChromeSilver,
         fontSize = 12.sp,
         fontWeight = FontWeight.Black,
         letterSpacing = 2.sp,
@@ -243,33 +326,30 @@ fun SettingsToggleItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    Surface(
-        color = Color(0xFF1A1A1A).copy(alpha = 0.5f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f))
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Icon(icon, contentDescription = null, tint = if (checked) Color(0xFFBB86FC) else Color.Gray)
+                Icon(icon, contentDescription = null, tint = if (checked) ChromeSilver else TitaniumGray)
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(subtitle, color = Color.Gray, fontSize = 12.sp)
+                    Text(subtitle, color = TitaniumGray, fontSize = 12.sp)
                 }
             }
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFFBB86FC),
-                    checkedTrackColor = Color(0xFFBB86FC).copy(alpha = 0.3f),
-                    uncheckedThumbColor = Color.Gray,
+                    checkedThumbColor = ChromeSilver,
+                    checkedTrackColor = ChromeSilver.copy(alpha = 0.3f),
+                    uncheckedThumbColor = TitaniumGray,
                     uncheckedTrackColor = Color.DarkGray
                 )
             )
@@ -284,23 +364,20 @@ fun SettingsActionItem(
     icon: ImageVector,
     onClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        color = Color(0xFF1A1A1A).copy(alpha = 0.5f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f))
+    ExorkNeumorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = Color(0xFFBB86FC))
+            Icon(icon, contentDescription = null, tint = ChromeSilver)
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text(subtitle, color = Color.Gray, fontSize = 12.sp)
+                Text(subtitle, color = TitaniumGray, fontSize = 12.sp)
             }
         }
     }
