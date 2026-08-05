@@ -9,7 +9,7 @@ object XpCalculator {
     fun calculateExerciseXp(exercise: Exercise): Int {
         val sets = exercise.sets
         
-        return when (exercise.trackingType) {
+        val rawXp = when (exercise.trackingType) {
             ExerciseTrackingType.REPS -> {
                 val category = exercise.category
                 when (category) {
@@ -26,15 +26,15 @@ object XpCalculator {
             }
             ExerciseTrackingType.SECONDS -> {
                 val totalSeconds = (exercise.duration ?: 0) * sets
-                val xp = totalSeconds / 30
-                xp.coerceAtMost(50)
+                totalSeconds / 30
             }
             ExerciseTrackingType.DISTANCE -> {
                 val distance = exercise.distanceKm ?: 0.0
-                val xp = (distance * 5).toInt()
-                xp.coerceAtMost(100)
+                (distance * 5).toInt()
             }
         }
+        // Clamp maximum XP per standard set/exercise to a sane range to prevent formula overflow
+        return rawXp.coerceIn(0, 100)
     }
 
     fun calculateWorkoutXp(exercises: List<Exercise>, streak: Int): Int {

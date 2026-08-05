@@ -257,7 +257,17 @@ class FitnessRepository(
     ) {
         val currentUser = user.first() ?: return
         
-        var newXp = currentUser.xp + xpGained
+        var effectiveXpGained = xpGained
+        var updatedCustomXpToday = currentUser.customXpEarnedToday
+        
+        if (isWorkout) {
+            val maxCustomXp = 250
+            val remainingCap = (maxCustomXp - currentUser.customXpEarnedToday).coerceAtLeast(0)
+            effectiveXpGained = xpGained.coerceAtMost(remainingCap)
+            updatedCustomXpToday += effectiveXpGained
+        }
+
+        var newXp = currentUser.xp + effectiveXpGained
         var newLevel = currentUser.level
         
         // Handle Level Ups
@@ -337,7 +347,7 @@ class FitnessRepository(
         // Similar for pullups/plank... (omitting for brevity or can add)
 
         // XP Milestones
-        val totalXpAfter = currentUser.totalXpEarned + xpGained
+        val totalXpAfter = currentUser.totalXpEarned + effectiveXpGained
         checkXpMilestones(currentUser.totalXpEarned, totalXpAfter)
 
         val updatedUser = currentUser.copy(
@@ -355,10 +365,11 @@ class FitnessRepository(
             maxPushupsSingleWorkout = maxOf(currentUser.maxPushupsSingleWorkout, pushups),
             maxPullupsSingleWorkout = maxOf(currentUser.maxPullupsSingleWorkout, pullups),
             maxPlankSingleWorkout = maxOf(currentUser.maxPlankSingleWorkout, plankSeconds),
-            maxXpSingleWorkout = maxOf(currentUser.maxXpSingleWorkout, xpGained),
+            maxXpSingleWorkout = maxOf(currentUser.maxXpSingleWorkout, effectiveXpGained),
             totalPromotions = if (isRankPromotion) currentUser.totalPromotions + 1 else currentUser.totalPromotions,
             highestRank = RankCalculator.getHighestRank(currentUser.highestRank, newRank),
-            lastWorkoutDate = System.currentTimeMillis()
+            lastWorkoutDate = System.currentTimeMillis(),
+            customXpEarnedToday = updatedCustomXpToday
         )
 
         updateUser(updatedUser)

@@ -11,12 +11,17 @@ import com.example.myapplication.model.WorkoutEntity
 import com.example.myapplication.util.XpCalculator
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() {
+
+    val user = repository.user
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _exercises = MutableStateFlow<List<Exercise>>(emptyList())
     val exercises = _exercises.asStateFlow()
@@ -51,10 +56,16 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             val workoutExercises = _exercises.value
             if (workoutExercises.isEmpty()) return@launch
 
-            // 1. Calculate XP gained
-            val xpGained = XpCalculator.calculateWorkoutXp(workoutExercises, currentUser.streak)
+            // 1. Calculate raw XP gained
+            val rawXpGained = XpCalculator.calculateWorkoutXp(workoutExercises, currentUser.streak)
 
-            // 2. Track total stats for this workout
+            // 2. Synchronize with Daily Cap (+250 XP)
+            val maxCustomXp = 250
+            val currentCustomXpToday = currentUser.customXpEarnedToday
+            val remainingCap = (maxCustomXp - currentCustomXpToday).coerceAtLeast(0)
+            val actualXpToAward = rawXpGained.coerceAtMost(remainingCap)
+
+            // 3. Track total stats for this workout
             var addedPushups = 0
             var addedPullups = 0
             var addedPlankTime = 0
@@ -66,25 +77,24 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
                     ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
                     ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
                     ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
-                    ExerciseCategory.OTHER -> {
-                        // For OTHER, we might want to still track if they chose a tracking type that fits
-                        // But per requirements, we'll stick to manual category selection.
-                    }
+                    ExerciseCategory.OTHER -> {}
                 }
             }
 
-            // 3. Record Progress via Repository (Centralized Logic)
+            // 4. Record Progress via Repository
+            // We pass the raw XP, the repository will handle the capping internally again for safety,
+            // but we ensure consistency by calculating actualXpToAward here for the UI.
             repository.recordProgress(
                 pushups = addedPushups,
                 pullups = addedPullups,
                 plankSeconds = addedPlankTime,
                 distanceKm = addedDistance,
-                xpGained = xpGained,
+                xpGained = rawXpGained,
                 isWorkout = true
             )
 
-            // 4. Save Workout Entity for history
-            val workoutEntity = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = xpGained)
+            // 5. Save Workout Entity for history
+            val workoutEntity = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = actualXpToAward)
             val exerciseEntities = workoutExercises.map { 
                 ExerciseEntity(
                     workoutId = 0,
@@ -99,7 +109,8 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
             }
             repository.insertWorkout(workoutEntity, exerciseEntities)
 
-            _eventFlow.emit(WorkoutEvent.WorkoutCompleted(xpGained))
+            // Emit the actual awarded XP for the celebratory popup
+            _eventFlow.emit(WorkoutEvent.WorkoutCompleted(actualXpToAward))
             
             // Reset exercises
             _exercises.value = emptyList()

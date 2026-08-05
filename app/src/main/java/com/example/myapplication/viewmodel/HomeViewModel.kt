@@ -224,7 +224,7 @@ class HomeViewModel(
                 )
                 repository.clearDailyQuests()
                 repository.insertDailyQuests(newQuests)
-                repository.updateUser(currentUser.copy(lastQuestRefreshDate = now))
+                repository.updateUser(currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0))
                 notifyWidget()
                 
                 // Sequential Flow Logic

@@ -53,6 +53,7 @@ fun WorkoutScreen(
     onNavigateBack: () -> Unit
 ) {
     val exercises by viewModel.exercises.collectAsState()
+    val user by viewModel.user.collectAsState()
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
 
@@ -147,14 +148,35 @@ fun WorkoutScreen(
                     }
                 }
 
-                ExorkChromeButton(
-                    text = "UPLOAD PROGRESS",
-                    onClick = { 
-                        soundManager.playClick()
-                        viewModel.completeWorkout() 
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val currentCustomXp = user?.customXpEarnedToday ?: 0
+                val maxCustomXp = 250
+                val isCapped = currentCustomXp >= maxCustomXp
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isCapped) "MAX DAILY CUSTOM XP REACHED ($maxCustomXp/$maxCustomXp XP)"
+                        else "DAILY CUSTOM XP: [ $currentCustomXp / $maxCustomXp XP ]",
+                        style = TextStyle(
+                            color = if (isCapped) ErrorRed else TitaniumGray,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            letterSpacing = 0.5.sp
+                        )
+                    )
+
+                    ExorkChromeButton(
+                        text = "UPLOAD PROGRESS",
+                        onClick = {
+                            soundManager.playClick()
+                            viewModel.completeWorkout()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             // XP Celebration Overlay
