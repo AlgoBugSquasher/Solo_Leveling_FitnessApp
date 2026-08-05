@@ -18,6 +18,16 @@ class PreferencesManager(context: Context) {
         }
     }
 
+    fun hasAcceptedQualifications(): Boolean {
+        return sharedPreferences.getBoolean("has_accepted_qualifications", false)
+    }
+
+    fun setHasAcceptedQualifications(accepted: Boolean) {
+        sharedPreferences.edit(commit = false) {
+            putBoolean("has_accepted_qualifications", accepted)
+        }
+    }
+
     fun getAvatarUri(): String? {
         return sharedPreferences.getString("avatar_uri", null)
     }
@@ -29,6 +39,16 @@ class PreferencesManager(context: Context) {
             } else {
                 putString("avatar_uri", uri)
             }
+        }
+    }
+
+    fun hasSeenDailyQuestPopUp(date: String): Boolean {
+        return sharedPreferences.getString("last_quest_popup_date", "") == date
+    }
+
+    fun setHasSeenDailyQuestPopUp(date: String) {
+        sharedPreferences.edit(commit = false) {
+            putString("last_quest_popup_date", date)
         }
     }
 }

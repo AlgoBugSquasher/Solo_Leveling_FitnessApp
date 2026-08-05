@@ -190,6 +190,59 @@ class FitnessRepository(
         return trainingPlanDao.getWeeklyBonusSync()
     }
 
+    suspend fun checkStreakReset(): Boolean {
+        val currentUser = user.first() ?: return false
+        if (currentUser.lastWorkoutDate == 0L) return false
+
+        val lastDate = Calendar.getInstance().apply {
+            timeInMillis = currentUser.lastWorkoutDate
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val currentDate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        if (lastDate.timeInMillis == currentDate.timeInMillis) return false
+
+        val plannedExercises = allPlannedExercises.first()
+        if (plannedExercises.isEmpty()) return false
+
+        val workoutDays = plannedExercises.map { it.dayOfWeek }.toSet()
+        val checkDate = (lastDate.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+
+        var missedWorkoutDay = false
+        while (checkDate.before(currentDate)) {
+            val dayOfWeek = when (checkDate.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 1
+                Calendar.TUESDAY -> 2
+                Calendar.WEDNESDAY -> 3
+                Calendar.THURSDAY -> 4
+                Calendar.FRIDAY -> 5
+                Calendar.SATURDAY -> 6
+                Calendar.SUNDAY -> 7
+                else -> 7
+            }
+
+            if (workoutDays.contains(dayOfWeek)) {
+                missedWorkoutDay = true
+                break
+            }
+            checkDate.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        if (missedWorkoutDay && currentUser.streak > 0) {
+            updateUser(currentUser.copy(streak = 0))
+            return true
+        }
+        return false
+    }
+
     /**
      * Unified progression system.
      * Updates user statistics and handles level/rank progression.
@@ -238,7 +291,13 @@ class FitnessRepository(
         }
 
         // Streak calculation
-        val newStreak = calculateNewStreak(currentUser.lastWorkoutDate, currentUser.streak)
+        // Daily Quest completion ALWAYS increments streak (+1)
+        // If it's a workout session (isWorkout=true), we also use standard streak logic
+        val newStreak = if (xpGained >= 50 && !isWorkout) {
+            currentUser.streak + 1
+        } else {
+            calculateNewStreak(currentUser.lastWorkoutDate, currentUser.streak)
+        }
         
         // Streak milestones
         val streakMilestones = listOf(7, 30, 100, 365)

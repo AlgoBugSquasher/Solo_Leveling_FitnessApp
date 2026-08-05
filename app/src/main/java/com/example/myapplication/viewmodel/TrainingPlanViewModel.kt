@@ -37,6 +37,9 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
     private val _showBonusDialog = MutableSharedFlow<Boolean>()
     val showBonusDialog = _showBonusDialog.asSharedFlow()
 
+    private val _showDayCompleteDialog = MutableSharedFlow<Int>()
+    val showDayCompleteDialog = _showDayCompleteDialog.asSharedFlow()
+
     private fun seedTrainingPlan() {
         viewModelScope.launch {
             val days = (1..7).map { TrainingDay(dayOfWeek = it) }
@@ -202,6 +205,7 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
                     lastRewardYear = currentYear
                 )
                 repository.recordProgress(xpGained = 200)
+                _showDayCompleteDialog.emit(200)
             }
 
             repository.updateTrainingDay(finalDay)

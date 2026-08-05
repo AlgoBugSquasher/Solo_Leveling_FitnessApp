@@ -1,7 +1,11 @@
 package com.example.myapplication
 
 import android.os.Bundle
+import android.Manifest
+import android.os.Build
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +21,10 @@ import com.example.myapplication.data.PreferencesManager
 import com.example.myapplication.viewmodel.*
 import com.example.myapplication.ui.screens.*
 import com.example.myapplication.ui.components.ExorkSystemDialog
+import com.example.myapplication.ui.components.QuestInfoDialog
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.ui.theme.ExorkTheme
 import com.example.myapplication.ui.theme.MonarchSlate
@@ -55,7 +61,7 @@ class MainActivity : ComponentActivity() {
         val viewModelFactory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 return when {
-                    modelClass.isAssignableFrom(HomeViewModel::class.java) -> HomeViewModel(repository, preferencesManager, this@MainActivity.filesDir) as T
+                    modelClass.isAssignableFrom(HomeViewModel::class.java) -> HomeViewModel(repository, preferencesManager, this@MainActivity.filesDir, this@MainActivity.applicationContext) as T
                     modelClass.isAssignableFrom(WorkoutViewModel::class.java) -> WorkoutViewModel(repository) as T
                     modelClass.isAssignableFrom(AbilityViewModel::class.java) -> AbilityViewModel(repository) as T
                     modelClass.isAssignableFrom(BadgeViewModel::class.java) -> BadgeViewModel(repository) as T
@@ -73,9 +79,19 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge()
-        // Removed local preferencesManager creation here as it's now in onCreate scope
+        
+        com.example.myapplication.receiver.BootReceiver.scheduleDailyReminder(this)
 
         setContent {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { }
+                LaunchedEffect(Unit) {
+                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            
             ExorkTheme {
                 val navController = rememberNavController()
                 val homeViewModel = ViewModelProvider(this, viewModelFactory)[HomeViewModel::class.java]
@@ -85,29 +101,11 @@ class MainActivity : ComponentActivity() {
                 val notificationQueue = remember { mutableStateListOf<SystemNotification>() }
                 val activeNotification = notificationQueue.firstOrNull()
 
-                // Onboarding / First Launch Logic
-                val isFirstLaunch = remember { preferencesManager.isFirstLaunch() }
-                LaunchedEffect(Unit) {
-                    if (isFirstLaunch) {
-                        kotlinx.coroutines.delay(3000L)
-                        notificationQueue.add(SystemNotification(
-                            content = "You have acquired the qualifications to be a Player.\nWill you accept?",
-                            onPrimary = {
-                                preferencesManager.setFirstLaunch(false)
-                                notificationQueue.removeAt(0)
-                            },
-                            onSecondary = {
-                                android.widget.Toast.makeText(
-                                    this@MainActivity,
-                                    "The System does not accept refusal.",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        ))
-                    }
-                }
+                // Dialog Flow Orchestration
+                val showQualifications by homeViewModel.showQualificationsDialog.collectAsState()
+                val shouldShowQuestDialog by homeViewModel.shouldShowQuestDialog.collectAsState()
+                val quests by homeViewModel.dailyQuests.collectAsState()
 
-                // Global Event Collection
                 LaunchedEffect(Unit) {
                     homeViewModel.uiEvent.collect { event ->
                         when (event) {
@@ -161,6 +159,15 @@ class MainActivity : ComponentActivity() {
                                     onPrimary = { notificationQueue.removeAt(0) }
                                 ))
                             }
+                            is UiEvent.PenaltyTriggered -> {
+                                notificationQueue.add(SystemNotification(
+                                    title = "PENALTY ZONE",
+                                    content = "You have missed a scheduled training session. Your streak has been reset to 0.",
+                                    primaryText = "CONFIRM",
+                                    secondaryText = null,
+                                    onPrimary = { notificationQueue.removeAt(0) }
+                                ))
+                            }
                             else -> {}
                         }
                     }
@@ -193,22 +200,48 @@ class MainActivity : ComponentActivity() {
                         .setEnabled(userState.value.soundEnabled)
                 }
 
+                // Navigation Route Observation
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
+
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MonarchSlate
                 ) {
-                    activeNotification?.let { notification ->
-                        ExorkSystemDialog(
-                            title = notification.title,
-                            content = notification.content,
-                            primaryButtonText = notification.primaryText,
-                            secondaryButtonText = notification.secondaryText,
-                            iconText = notification.iconText,
-                            imageRes = notification.imageRes,
-                            isBadgeLayout = notification.isBadgeLayout,
-                            onPrimaryClick = notification.onPrimary,
-                            onSecondaryClick = notification.onSecondary
-                        )
+                    // Only render high-level dialogs when we are on the Home screen
+                    // This prevents overlaps during the Splash sequence.
+                    if (currentRoute == "home") {
+                        if (showQualifications) {
+                            ExorkSystemDialog(
+                                title = "NOTIFICATION",
+                                content = "You have acquired the qualifications to be a Player.\nWill you accept?",
+                                onPrimaryClick = { homeViewModel.acceptQualifications() },
+                                onSecondaryClick = {
+                                    android.widget.Toast.makeText(
+                                        this@MainActivity,
+                                        "The System does not accept refusal.",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                        } else if (shouldShowQuestDialog) {
+                            QuestInfoDialog(
+                                quests = quests,
+                                onDismiss = { homeViewModel.dismissQuestDialog() }
+                            )
+                        } else if (activeNotification != null) {
+                            ExorkSystemDialog(
+                                title = activeNotification.title,
+                                content = activeNotification.content,
+                                primaryButtonText = activeNotification.primaryText,
+                                secondaryButtonText = activeNotification.secondaryText,
+                                iconText = activeNotification.iconText,
+                                imageRes = activeNotification.imageRes,
+                                isBadgeLayout = activeNotification.isBadgeLayout,
+                                onPrimaryClick = activeNotification.onPrimary,
+                                onSecondaryClick = activeNotification.onSecondary
+                            )
+                        }
                     }
 
                     NavHost(navController = navController, startDestination = "splash") {

@@ -1,5 +1,9 @@
 package com.example.myapplication.ui.theme
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +24,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -183,8 +188,21 @@ fun ExorkProfileHeader(
     user: User,
     avatarUri: String?,
     updateKey: Long,
-    onAvatarClick: () -> Unit
+    onAvatarClick: () -> Unit,
+    onRankClick: () -> Unit
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = user.getProgressPercentage(),
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "LevelProgress"
+    )
+    
+    val animatedXp by animateIntAsState(
+        targetValue = user.xp,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "XpProgress"
+    )
+
     ExorkNeumorphicCard(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Metallic 3D Circular Avatar Frame with Camera Badge
@@ -254,7 +272,7 @@ fun ExorkProfileHeader(
             
             Spacer(modifier = Modifier.width(24.dp))
             
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = user.rank.uppercase(),
                     style = ExorkTypography.labelMedium,
@@ -268,13 +286,32 @@ fun ExorkProfileHeader(
                     )
                 )
             }
+
+            // Interactive Rank Entry Button
+            Surface(
+                modifier = Modifier
+                    .wrapContentSize()
+                    .clickable { onRankClick() },
+                shape = CircleShape,
+                color = ObsidianVoid,
+                border = BorderStroke(1.dp, ChromeSilver.copy(alpha = 0.3f))
+            ) {
+                Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.MilitaryTech,
+                        contentDescription = null,
+                        tint = ChromeSilver,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
         
         Spacer(modifier = Modifier.height(20.dp))
         
         ExorkNeumorphicProgressBar(
-            progress = user.getProgressPercentage(),
-            label = "${user.xp} XP",
+            progress = animatedProgress,
+            label = "$animatedXp XP",
             subLabel = "${user.xpToNextLevel()} XP TO LEVEL UP"
         )
     }

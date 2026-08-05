@@ -22,11 +22,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -37,7 +40,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.myapplication.model.*
 import com.example.myapplication.ui.components.AvatarPreviewDialog
+import com.example.myapplication.ui.components.HunterRankDialog
 import com.example.myapplication.ui.components.NativeAvatarCropper
+import com.example.myapplication.ui.components.QuestInfoDialog
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.HomeViewModel
@@ -68,12 +73,17 @@ fun HomeScreen(
     val weeklyXp by viewModel.weeklyXp.collectAsState()
     val latestAchievement by viewModel.latestAchievement.collectAsState()
     val avatarUri by viewModel.avatarUri.collectAsState()
+    val isTodayRestDay by viewModel.isTodayRestDay.collectAsState()
+    val showRankDialog by viewModel.showRankDialog.collectAsState()
 
     var avatarUpdateKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showAvatarPreview by remember { mutableStateOf(false) }
     var cropUri by remember { mutableStateOf<Uri?>(null) }
 
+    var floatingXpReward by remember { mutableStateOf<Int?>(null) }
+
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val soundManager = remember { SoundManager.getInstance(context) }
 
     // Safe internal file copying for avatar persistence
@@ -82,6 +92,18 @@ fun HomeScreen(
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
             cropUri = selectedUri
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is UiEvent.XpGained -> {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    floatingXpReward = event.amount
+                }
+                else -> {}
+            }
         }
     }
 
@@ -132,41 +154,125 @@ fun HomeScreen(
                 ) {
                     // 1. Hunter Header
                     item {
-                        ExorkProfileHeader(
-                            user = user,
-                            avatarUri = avatarUri,
-                            updateKey = avatarUpdateKey,
-                            onAvatarClick = { 
-                                soundManager.playClick()
-                                showAvatarPreview = true 
+                        Box(contentAlignment = Alignment.Center) {
+                            ExorkProfileHeader(
+                                user = user,
+                                avatarUri = avatarUri,
+                                updateKey = avatarUpdateKey,
+                                onAvatarClick = { 
+                                    soundManager.playClick()
+                                    showAvatarPreview = true 
+                                },
+                                onRankClick = {
+                                    soundManager.playClick()
+                                    viewModel.openRankDialog()
+                                }
+                            )
+
+                            // Floating XP Animation
+                            AnimatedVisibility(
+                                visible = floatingXpReward != null,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                if (floatingXpReward != null) {
+                                    LaunchedEffect(floatingXpReward) {
+                                        kotlinx.coroutines.delay(2.seconds)
+                                        floatingXpReward = null
+                                    }
+                                    
+                                    Box(
+                                        modifier = Modifier
+                                            .offset(y = (-40).dp)
+                                            .background(
+                                                Brush.radialGradient(
+                                                    listOf(ChromeSilver.copy(alpha = 0.4f), Color.Transparent)
+                                                ),
+                                                CircleShape
+                                            )
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = "+$floatingXpReward XP GAINED!",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black,
+                                            style = MaterialTheme.typography.headlineSmall.copy(
+                                                shadow = Shadow(Color.Black, blurRadius = 8f)
+                                            )
+                                        )
+                                    }
+                                }
                             }
-                        )
+                        }
                     }
 
-                    // 2. Featured Daily Mission
-                    val topQuest = quests.firstOrNull { !it.isCompleted }
-                    if (topQuest != null) {
+                    // 2. Daily Quest Section
+                    if (quests.isNotEmpty() && quests.any { !it.isCompleted }) {
                         item {
-                            ExorkNeumorphicSectionHeader(title = "Featured Mission")
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ExorkNeumorphicSectionHeader(title = "DAILY QUEST")
+                                if (isTodayRestDay) {
+                                    Text(
+                                        "REST DAY (Optional: +1 Streak & +50 XP)",
+                                        style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = ChromeSilver.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             ExorkNeumorphicCard {
-                                Row(
+                                Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(topQuest.title.uppercase(), style = ExorkTypography.labelLarge, color = Color.White)
-                                        Text(topQuest.goal, style = ExorkTypography.headlineSmall, color = TitaniumGray)
+                                    quests.forEach { quest ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable(enabled = !quest.isCompleted) {
+                                                    soundManager.playClick()
+                                                    viewModel.toggleQuestProgress(quest.id)
+                                                },
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    quest.title.uppercase(), 
+                                                    style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black), 
+                                                    color = Color.White
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                ExorkNeumorphicProgressBar(
+                                                    progress = quest.getProgressPercentage()
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(16.dp))
+                                            Text(
+                                                "[ ${quest.targetValue} ]",
+                                                style = ExorkTypography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = ChromeSilver
+                                            )
+                                        }
                                     }
-                                    ExorkChromeButton(
-                                        text = "+${topQuest.xpReward} XP",
-                                        onClick = {
-                                            viewModel.completeQuest(topQuest.id)
-                                            soundManager.playQuestComplete()
-                                        },
-                                        height = 40.dp
-                                    )
+
+                                    // CLAIM REWARD button if all targets met
+                                    if (quests.all { it.currentProgress >= it.targetValue && !it.isCompleted }) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        ExorkGlowingChromeButton(
+                                            text = "CLAIM REWARD (+50 XP)",
+                                            onClick = {
+                                                soundManager.playLevelUp()
+                                                viewModel.claimDailyQuestReward()
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -440,6 +546,83 @@ fun HomeScreen(
                     cropUri = null
                 },
                 onDismiss = { cropUri = null }
+            )
+        }
+
+        if (showRankDialog) {
+            HunterRankDialog(
+                user = user,
+                onDismiss = { viewModel.dismissRankDialog() }
+            )
+        }
+    }
+}
+
+@Composable
+fun ExorkGlowingChromeButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val glowIntensity by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowIntensity"
+    )
+
+    Surface(
+        modifier = modifier
+            .height(58.dp)
+            .shadow(
+                elevation = 16.dp,
+                shape = RoundedCornerShape(12.dp),
+                ambientColor = Color.White.copy(alpha = 0.4f * glowIntensity),
+                spotColor = ChromeSilver.copy(alpha = 0.6f * glowIntensity)
+            )
+            .border(
+                width = 2.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        ChromeSilver,
+                        Color.White.copy(alpha = glowIntensity),
+                        ChromeSilver
+                    )
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = Color.Transparent
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFE0E0E0), // Light Chrome
+                            Color(0xFF8E8E93), // Deep Steel
+                            Color(0xFF48484A)  // Dark Shadow
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text.uppercase(),
+                style = ExorkTypography.labelLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    color = Color.Black,
+                    letterSpacing = 1.5.sp,
+                    shadow = Shadow(
+                        color = Color.White.copy(alpha = 0.5f),
+                        blurRadius = 8f
+                    )
+                )
             )
         }
     }

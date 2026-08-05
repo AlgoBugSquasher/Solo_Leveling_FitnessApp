@@ -27,6 +27,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.myapplication.ui.components.ExorkDetailDialog
+import com.example.myapplication.ui.components.HunterRankDialog
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.util.SoundManager
 import com.example.myapplication.viewmodel.HomeViewModel
@@ -42,6 +44,7 @@ fun HunterProfileScreen(
     val soundManager = remember { SoundManager.getInstance(context) }
     val avatarUri by viewModel.avatarUri.collectAsState()
     val avatarUpdateKey = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val showRankDialog by viewModel.showRankDialog.collectAsState()
 
     Scaffold(
         topBar = {
@@ -82,7 +85,11 @@ fun HunterProfileScreen(
                         user = user,
                         avatarUri = avatarUri,
                         updateKey = avatarUpdateKey.longValue,
-                        onAvatarClick = { /* Click handled in HomeScreen, or add logic here if needed */ }
+                        onAvatarClick = { /* Click handled in HomeScreen, or add logic here if needed */ },
+                        onRankClick = {
+                            soundManager.playClick()
+                            viewModel.openRankDialog()
+                        }
                     )
                 }
 
@@ -170,6 +177,13 @@ fun HunterProfileScreen(
                 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
             }
+        }
+
+        if (showRankDialog) {
+            HunterRankDialog(
+                user = user,
+                onDismiss = { viewModel.dismissRankDialog() }
+            )
         }
     }
 }

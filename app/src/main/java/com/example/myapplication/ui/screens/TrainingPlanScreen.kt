@@ -70,28 +70,11 @@ fun TrainingPlanScreen(
     // Day Reward Animation State
     var dayRewardAnimation by remember { mutableStateOf<Int?>(null) }
 
-    // Monitor for day completion reward celebration
-    val previousDayReward = remember { mutableMapOf<Int, Int>() }
-    val previousDayYear = remember { mutableMapOf<Int, Int>() }
-    var isInitialLoad by remember { mutableStateOf(true) }
-    
-    LaunchedEffect(plan) {
-        val calendar = Calendar.getInstance()
-        val currentWeek = calendar.get(Calendar.WEEK_OF_YEAR)
-        val currentYear = calendar.get(Calendar.YEAR)
-        
-        plan.forEach { day ->
-            val rewardClaimedThisWeek = day.lastRewardWeek == currentWeek && day.lastRewardYear == currentYear
-            val wasAlreadyNoted = previousDayReward[day.dayOfWeek] == currentWeek && previousDayYear[day.dayOfWeek] == currentYear
-            
-            if (rewardClaimedThisWeek && !wasAlreadyNoted && !isInitialLoad) {
-                soundManager.playBadgeUnlock(com.example.myapplication.model.BadgeRarity.COMMON)
-                dayRewardAnimation = 200
-            }
-            previousDayReward[day.dayOfWeek] = day.lastRewardWeek
-            previousDayYear[day.dayOfWeek] = day.lastRewardYear
+    LaunchedEffect(Unit) {
+        viewModel.showDayCompleteDialog.collect { xp ->
+            soundManager.playBadgeUnlock(com.example.myapplication.model.BadgeRarity.COMMON)
+            dayRewardAnimation = xp
         }
-        isInitialLoad = false
     }
 
     LaunchedEffect(Unit) {
@@ -101,12 +84,6 @@ fun TrainingPlanScreen(
         }
     }
 
-    if (dayRewardAnimation != null) {
-        LaunchedEffect(dayRewardAnimation) {
-            delay(3000)
-            dayRewardAnimation = null
-        }
-    }
 
     if (showBonusPopup) {
         WeeklyBonusDialog(onDismiss = { showBonusPopup = false })
@@ -298,23 +275,42 @@ fun TrainingPlanScreen(
             }
 
             // Day Reward Celebration Overlay
-            AnimatedVisibility(
-                visible = dayRewardAnimation != null,
-                enter = fadeIn() + scaleIn(initialScale = 0.8f),
-                exit = fadeOut() + scaleOut(targetScale = 1.1f),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
-                dayRewardAnimation?.let { xp ->
+            if (dayRewardAnimation != null) {
+                Dialog(
+                    onDismissRequest = { dayRewardAnimation = null },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
+                ) {
                     ExorkNeumorphicCard(
-                        modifier = Modifier.padding(24.dp)
+                        modifier = Modifier.padding(24.dp).fillMaxWidth(0.9f)
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("DAY COMPLETE", color = ChromeSilver, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("+$xp XP", color = Color.White, fontWeight = FontWeight.Black, fontSize = 32.sp)
+                            Text(
+                                "DAY COMPLETE", 
+                                color = ChromeSilver, 
+                                fontWeight = FontWeight.ExtraBold, 
+                                letterSpacing = 2.sp,
+                                style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 8f))
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "+${dayRewardAnimation} XP", 
+                                color = Color.White, 
+                                fontWeight = FontWeight.Black, 
+                                fontSize = 36.sp
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+                            
+                            ExorkChromeButton(
+                                text = "CONTINUE",
+                                onClick = {
+                                    soundManager.playClick()
+                                    dayRewardAnimation = null
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }

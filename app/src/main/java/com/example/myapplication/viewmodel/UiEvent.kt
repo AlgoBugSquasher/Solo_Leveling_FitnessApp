@@ -16,6 +16,8 @@ sealed class UiEvent {
     data class AchievementUnlocked(val achievement: Achievement) : UiEvent()
     data class NewPersonalRecord(val recordName: String, val oldValue: Int, val newValue: Int) : UiEvent()
     data class RankPromotion(val oldRank: String, val newRank: String) : UiEvent()
+    data class XpGained(val amount: Int) : UiEvent()
+    data object PenaltyTriggered : UiEvent()
     data class BackupSuccess(val message: String) : UiEvent()
     data class BackupError(val message: String) : UiEvent()
 }
