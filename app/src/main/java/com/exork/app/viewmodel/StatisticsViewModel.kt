@@ -1,0 +1,32 @@
+package com.exork.app.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.exork.app.data.FitnessRepository
+import com.exork.app.model.Badge
+import com.exork.app.model.BadgeData
+import com.exork.app.model.User
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+class StatisticsViewModel(private val repository: FitnessRepository) : ViewModel() {
+
+    val user: StateFlow<User?> = repository.user
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val unlockedBadges: StateFlow<List<Badge>> = repository.user
+        .filterNotNull()
+        .map { user ->
+            BadgeData.allBadges.filter { user.level >= it.requiredLevel }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val totalBadges = BadgeData.allBadges.size
+
+    val highestBadge: StateFlow<Badge?> = unlockedBadges
+        .map { it.maxByOrNull { b -> b.requiredLevel } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val weeklyXp: StateFlow<Int> = repository.getWeeklyXp()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+}
