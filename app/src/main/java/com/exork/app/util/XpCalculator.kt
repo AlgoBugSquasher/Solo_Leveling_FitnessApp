@@ -65,4 +65,12 @@ object XpCalculator {
     fun calculateRequiredXP(level: Int): Int {
         return (250 * level * level) + (750 * level) + 2000
     }
+
+    fun calculateCurrentLevelXp(totalXp: Int, level: Int): Int {
+        var remainingXp = totalXp
+        for (i in 1 until level) {
+            remainingXp -= calculateRequiredXP(i)
+        }
+        return remainingXp.coerceAtLeast(0)
+    }
 }

@@ -1,9 +1,12 @@
 package com.exork.app.viewmodel
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
 import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import com.exork.app.data.FitnessRepository
 import com.exork.app.data.PreferencesManager
 import com.exork.app.model.Ability
@@ -17,10 +20,14 @@ import com.exork.app.model.Achievement
 import com.exork.app.model.AchievementData
 import com.exork.app.model.ExerciseEntity
 import com.exork.app.model.WorkoutEntity
+import com.exork.app.model.PlannedExercise
+import com.exork.app.model.ExerciseTrackingType
 import com.exork.app.util.RankCalculator
 import com.exork.app.util.XpCalculator
 import java.util.Calendar
+import java.util.Date
 import java.io.File
+import java.time.LocalDate
 import android.util.Base64
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -82,6 +89,11 @@ class HomeViewModel(
     private val _isTodayRestDay = MutableStateFlow(false)
     val isTodayRestDay: StateFlow<Boolean> = _isTodayRestDay.asStateFlow()
 
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private var userSnapshotListener: com.google.firebase.firestore.ListenerRegistration? = null
+
     fun dismissQuestDialog() {
         _shouldShowQuestDialog.value = false
     }
@@ -103,8 +115,23 @@ class HomeViewModel(
     }
 
     fun updateAvatar(uri: String?) {
-        preferencesManager.setAvatarUri(uri)
-        _avatarUri.value = uri
+        viewModelScope.launch {
+            if (uri != null) {
+                val cloudUrl = repository.uploadAvatar(uri, context)
+                if (cloudUrl != null) {
+                    _avatarUri.value = cloudUrl
+                }
+            } else {
+                preferencesManager.setAvatarUri(null)
+                _avatarUri.value = null
+                // Clear in Firestore
+                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (firebaseUser != null) {
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(firebaseUser.uid)
+                        .update("photoUrl", null)
+                }
+            }
+        }
     }
 
     private val badgeMilestones = listOf(1, 5, 10, 15, 20, 25, 30, 40, 50, 60, 65, 70, 80, 90, 100)
@@ -195,16 +222,12 @@ class HomeViewModel(
 
     init {
         seedTitles()
-        checkAndRefreshQuests()
         observeRestDayStatus()
-        checkPenalty()
         observeAuthState()
     }
 
     private fun observeAuthState() {
         viewModelScope.launch {
-            // Check auth state every time the ViewModel is active or when user returns to home
-            // For simplicity, we trigger a sync check on init and potentially on a manual trigger
             syncFromRemote()
         }
     }
@@ -213,31 +236,146 @@ class HomeViewModel(
         viewModelScope.launch {
             val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             if (firebaseUser != null) {
-                // Check for username in Firestore
+                _isSyncing.value = true
+                
                 val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                try {
-                    val doc = db.collection("users").document(firebaseUser.uid).get().await()
-                    val existingUsername = doc.getString("username")
-                    _username.value = existingUsername
-                    
-                    if (existingUsername == null) {
-                        queueDialog(DialogType.USERNAME_SETUP)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("HomeViewModel", "Failed to fetch username", e)
-                }
-            }
+                val doc = try { db.collection("users").document(firebaseUser.uid).get().await() } catch(e: Exception) { null }
+                
+                if (doc != null && doc.exists()) {
+                    _username.value = doc.getString("username")
+                    val remoteLastRefresh = doc.getLong("lastQuestRefreshDate") ?: 0L
+                    val remoteXp = doc.getLong("totalXp")?.toInt() ?: doc.getLong("xp")?.toInt() ?: 0
+                    val remoteLevel = doc.getLong("hunterLevel")?.toInt() ?: 1
+                    val remoteStreak = doc.getLong("currentStreak")?.toInt() ?: 0
+                    val remoteLastQuestCompletedDate = doc.getString("lastQuestCompletedDate") ?: ""
+                    val remotePhotoUrl = doc.getString("photoUrl")
 
-            val currentUser = user.value
-            // Only auto-restore if the local database appears empty/new
-            if (currentUser.totalXpEarned == 0 && currentUser.totalWorkouts == 0) {
-                val remoteJson = repository.fetchBackupFromFirestore()
-                if (remoteJson != null) {
-                    android.util.Log.d("HomeViewModel", "Remote backup found. Auto-syncing to empty local database...")
-                    importData(remoteJson, isRemoteSync = true)
+                    // 1. Check if local DB is empty
+                    val currentUserSnapshot = repository.user.first()
+                    if (currentUserSnapshot == null || (currentUserSnapshot.totalXpEarned == 0 && currentUserSnapshot.totalWorkouts == 0)) {
+                        val remoteJson = doc.getString("backup_json")
+                        if (remoteJson != null) {
+                            // 2. Perform full restore from JSON
+                            performDataRestore(remoteJson, isRemoteSync = true)
+                        }
+                    }
+
+                    // 3. FORCE OVERWRITE STALE JSON DATA WITH LIVE ROOT FIELDS
+                    val userAfterRestore = repository.user.first() ?: User()
+                    repository.updateUser(userAfterRestore.copy(
+                        totalXpEarned = remoteXp,
+                        xp = XpCalculator.calculateCurrentLevelXp(remoteXp, remoteLevel),
+                        level = remoteLevel,
+                        streak = remoteStreak,
+                        lastQuestRefreshDate = remoteLastRefresh,
+                        lastQuestCompletedDate = remoteLastQuestCompletedDate,
+                        photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl
+                    ))
+
+                    // 4. Pull live quests if they are for today
+                    val dailyQuestsMap = doc.get("dailyQuests") as? Map<String, Any>
+                    if (dailyQuestsMap != null && !shouldRefreshQuests(remoteLastRefresh, System.currentTimeMillis())) {
+                        val remoteQuests = dailyQuestsMap.values.mapNotNull { 
+                            val q = it as? Map<String, Any> ?: return@mapNotNull null
+                            DailyQuest(
+                                id = (q["id"] as? Long)?.toInt() ?: 1,
+                                title = q["title"] as? String ?: "QUEST",
+                                currentProgress = (q["currentProgress"] as? Long)?.toInt() ?: 0,
+                                targetValue = (q["targetValue"] as? Long)?.toInt() ?: 20,
+                                xpReward = (q["xpReward"] as? Long)?.toInt() ?: 50,
+                                isCompleted = q["isCompleted"] as? Boolean ?: false
+                            )
+                        }
+                        if (remoteQuests.isNotEmpty()) {
+                            repository.clearDailyQuests()
+                            repository.insertDailyQuests(remoteQuests)
+                        }
+                    }
+
+                    // 5. Pull live planned exercises
+                    val remotePlannedMap = doc.get("plannedExercises") as? Map<String, Any>
+                    if (remotePlannedMap != null) {
+                        val remoteExercises = remotePlannedMap.values.mapNotNull {
+                            val e = it as? Map<String, Any> ?: return@mapNotNull null
+                            PlannedExercise(
+                                dayOfWeek = (e["dayOfWeek"] as? Long)?.toInt() ?: 1,
+                                name = e["name"] as? String ?: "EXERCISE",
+                                trackingType = ExerciseTrackingType.valueOf(e["trackingType"] as? String ?: "REPS"),
+                                sets = (e["sets"] as? Long)?.toInt(),
+                                reps = (e["reps"] as? Long)?.toInt(),
+                                seconds = (e["seconds"] as? Long)?.toInt(),
+                                distanceKm = e["distanceKm"] as? Double,
+                                isCompleted = e["isCompleted"] as? Boolean ?: false,
+                                lastCompletedWeek = (e["lastCompletedWeek"] as? Long)?.toInt() ?: 0,
+                                lastCompletedYear = (e["lastCompletedYear"] as? Long)?.toInt() ?: 0
+                            )
+                        }
+                        if (remoteExercises.isNotEmpty()) {
+                            repository.clearAllPlannedExercises()
+                            repository.insertPlannedExercises(remoteExercises)
+                        }
+                    }
+
+                    // 6. Pull live notes directly from sub-collection (Single Source of Truth)
+                    repository.fetchNotesFromFirestore()
+
+                    startRealTimeUserListener(firebaseUser.uid)
+                } else {
+                    repository.initializeUserInFirestore()
                 }
+
+                if (_username.value == null) {
+                    queueDialog(DialogType.USERNAME_SETUP)
+                }
+                
+                checkPenalty()
+                checkAndRefreshQuests()
+                _isSyncing.value = false
+            } else {
+                checkPenalty()
+                checkAndRefreshQuests()
             }
         }
+    }
+
+    private fun startRealTimeUserListener(userId: String) {
+        userSnapshotListener?.remove()
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        userSnapshotListener = db.collection("users").document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+                
+                val remoteXp = snapshot.getLong("totalXp")?.toInt() ?: snapshot.getLong("xp")?.toInt() ?: return@addSnapshotListener
+                val remoteStreak = snapshot.getLong("currentStreak")?.toInt() ?: 0
+                val remoteLastQuestDate = snapshot.getString("lastQuestCompletedDate") ?: ""
+                val remoteLevel = snapshot.getLong("hunterLevel")?.toInt() ?: 1
+                val remoteRank = snapshot.getString("hunterRank") ?: "E-Rank Hunter"
+
+                viewModelScope.launch {
+                    val currentUser = repository.user.first()
+                    if (currentUser != null) {
+                        // Only update if remote is actually different/newer to avoid local loopbacks
+                        if (remoteXp != currentUser.totalXpEarned || 
+                            remoteStreak != currentUser.streak || 
+                            remoteLastQuestDate != currentUser.lastQuestCompletedDate ||
+                            remoteLevel != currentUser.level) {
+                            
+                            repository.updateUser(currentUser.copy(
+                                totalXpEarned = remoteXp,
+                                streak = remoteStreak,
+                                lastQuestCompletedDate = remoteLastQuestDate,
+                                level = remoteLevel,
+                                rank = remoteRank
+                            ))
+                        }
+                    }
+                }
+            }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        userSnapshotListener?.remove()
     }
 
     private var validationJob: Job? = null
@@ -305,6 +443,13 @@ class HomeViewModel(
         viewModelScope.launch {
             val currentUser = repository.user.filterNotNull().first()
             val now = System.currentTimeMillis()
+            val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+            // Fix: Bulletproof Suppression
+            if (currentUser.lastQuestCompletedDate == todayDateString) {
+                android.util.Log.d("EXORK_QUEST", "Suppressed Quest Popup: Already completed today ($todayDateString)")
+                return@launch
+            }
             
             if (shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)) {
                 val newQuests = listOf(
@@ -317,20 +462,10 @@ class HomeViewModel(
                 repository.updateUser(currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0))
                 notifyWidget()
                 
-                // Sequential Flow Logic
                 if (!preferencesManager.hasAcceptedQualifications()) {
                     queueDialog(DialogType.WELCOME)
                 } else {
                     queueDialog(DialogType.QUEST_INFO)
-                }
-            } else {
-                val quests = repository.allDailyQuests.first()
-                if (quests.isNotEmpty() && quests.any { !it.isCompleted }) {
-                    if (!preferencesManager.hasAcceptedQualifications()) {
-                        queueDialog(DialogType.WELCOME)
-                    } else {
-                        queueDialog(DialogType.QUEST_INFO)
-                    }
                 }
             }
         }
@@ -358,9 +493,6 @@ class HomeViewModel(
             AchievementData.allAchievements
                 .filter { it.isUnlocked(user) }
                 .maxByOrNull { achievement -> 
-                    // We don't have an unlock date in User, so we just pick the hardest or last in list
-                    // In a real app, we'd store achievement unlock timestamps.
-                    // For now, let's pick the one with the highest requirement.
                     achievement.id
                 }
         }
@@ -424,16 +556,14 @@ class HomeViewModel(
         viewModelScope.launch {
             val quests = dailyQuests.value
             if (quests.isNotEmpty() && quests.all { it.currentProgress >= it.targetValue && !it.isCompleted }) {
-                // Mark all as completed
+                // Mark all as completed locally
                 quests.forEach { quest ->
                     repository.updateDailyQuest(quest.copy(isCompleted = true))
                 }
                 
-                // Grant XP: 50 XP base + 100 XP bonus for all done? 
-                // User said "CLAIM REWARD (+50 XP)". Let's stick to +50 XP or clarify.
-                // Usually it's +50 per quest? No, quests.forEach above is for marking.
-                // Let's grant 50 XP as requested on the button.
-                repository.recordProgress(xpGained = 50)
+                // Grant XP and sync to Firestore root fields immediately
+                repository.recordProgress(xpGained = 50, isQuestCompletion = true)
+                
                 _uiEvent.emit(UiEvent.XpGained(50))
                 notifyWidget()
                 
@@ -444,6 +574,40 @@ class HomeViewModel(
                     icon = "⚡",
                     rarity = com.exork.app.model.JourneyRarity.RARE
                 )
+                
+                // ATOMIC WORKMANAGER CANCELLATION ON CLAIM/FINISH
+                try {
+                    WorkManager.getInstance(context).cancelUniqueWork("DAILY_QUEST_REMINDER")
+                    WorkManager.getInstance(context).cancelAllWorkByTag("DAILY_QUEST_REMINDER_TAG")
+                    
+                    // COMPLETELY REMOVE / CANCEL LEGACY ALARMMANAGER
+                    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                    val intent = Intent(context, com.exork.app.receiver.NotificationReceiver::class.java)
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        context, 
+                        700, // Legacy Request Code
+                        intent, 
+                        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    if (pendingIntent != null) {
+                        alarmManager?.cancel(pendingIntent)
+                        pendingIntent.cancel()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("EXORK_QUEST", "Failed to cancel work or alarm", e)
+                }
+
+                // Final full sync to ensure backup_json captures completion
+                triggerFullCloudSync()
+            }
+        }
+    }
+
+    fun triggerFullCloudSync() {
+        viewModelScope.launch {
+            val json = exportData()
+            if (json.isNotEmpty()) {
+                repository.pushBackupToFirestore(json)
             }
         }
     }
@@ -482,6 +646,7 @@ class HomeViewModel(
                 put("totalPseudoPlanchePushups", user.totalPseudoPlanchePushups)
                 put("totalHangingSeconds", user.totalHangingSeconds)
                 put("totalExplosivePullups", user.totalExplosivePullups)
+                put("lastQuestCompletedDate", user.lastQuestCompletedDate)
             }
             json.put("user", userJson)
 
@@ -598,31 +763,9 @@ class HomeViewModel(
             }
             json.put("daily_quests", questsArray)
 
-            val notes = repository.allNotes.first()
-            val notesArray = JSONArray()
-            notes.forEach { n ->
-                notesArray.put(JSONObject().apply {
-                    put("title", n.title)
-                    put("content", n.content)
-                    put("timestamp", n.timestamp)
-                })
-            }
-            json.put("notes", notesArray)
+            // Notes (REMOVED: Sub-collection is the sole source of truth)
 
-            // Avatar Backup
-            val currentAvatarPath = preferencesManager.getAvatarUri()
-            if (currentAvatarPath != null) {
-                val avatarFile = File(currentAvatarPath)
-                if (avatarFile.exists()) {
-                    try {
-                        val bytes = avatarFile.readBytes()
-                        val base64 = Base64.encodeToString(bytes, Base64.DEFAULT)
-                        json.put("avatar_base64", base64)
-                    } catch (e: Exception) {
-                        // Log or ignore if image too large, but we try
-                    }
-                }
-            }
+            // Avatar Backup (REMOVED: Now handled by photoUrl root field in Firestore)
 
             json.toString(4)
         } catch (e: Exception) {
@@ -632,278 +775,242 @@ class HomeViewModel(
     }
 
     fun importData(jsonString: String, isRemoteSync: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val json = JSONObject(jsonString)
-                val version = json.optInt("version", 1)
+        viewModelScope.launch {
+            _isSyncing.value = true
+            performDataRestore(jsonString, isRemoteSync)
+            // Checks only run if NOT a silent background sync, but here we wait
+            checkPenalty()
+            checkAndRefreshQuests()
+            _isSyncing.value = false
+        }
+    }
 
-                // 0. Preferences
-                val hasAccepted = json.optBoolean("has_accepted_qualifications", false)
-                preferencesManager.setHasAcceptedQualifications(hasAccepted)
-                if (hasAccepted) preferencesManager.setFirstLaunch(false)
-                
-                // 1. User
-                val userJson = json.optJSONObject("user") ?: JSONObject()
-                val importedUser = User(
-                    id = 0,
-                    xp = userJson.optInt("xp", 0),
-                    level = userJson.optInt("level", 1),
-                    streak = userJson.optInt("streak", 0),
-                    rank = userJson.optString("rank", "E-Rank Hunter"),
-                    pushups = userJson.optInt("pushups", 0),
-                    pullups = userJson.optInt("pullups", 0),
-                    plankTime = userJson.optInt("plankTime", 0),
-                    totalDistanceKm = userJson.optDouble("totalDistanceKm", 0.0),
-                    totalXpEarned = userJson.optInt("totalXpEarned", 0),
-                    totalWorkouts = userJson.optInt("totalWorkouts", 0),
-                    highestStreak = userJson.optInt("highestStreak", 0),
-                    totalPromotions = userJson.optInt("totalPromotions", 0),
-                    highestRank = userJson.optString("highestRank", "E-Rank Hunter"),
-                    lastWorkoutDate = userJson.optLong("lastWorkoutDate", 0),
-                    lastQuestRefreshDate = userJson.optLong("lastQuestRefreshDate", 0),
-                    activeTitle = if (userJson.isNull("activeTitle")) null else userJson.optString("activeTitle"),
-                    soundEnabled = userJson.optBoolean("soundEnabled", true),
-                    maxPushupsSingleWorkout = userJson.optInt("maxPushupsSingleWorkout", 0),
-                    maxPullupsSingleWorkout = userJson.optInt("maxPullupsSingleWorkout", 0),
-                    maxPlankSingleWorkout = userJson.optInt("maxPlankSingleWorkout", 0),
-                    maxXpSingleWorkout = userJson.optInt("maxXpSingleWorkout", 0),
-                    totalPikePushups = userJson.optInt("totalPikePushups", 0),
-                    totalPseudoPlanchePushups = userJson.optInt("totalPseudoPlanchePushups", 0),
-                    totalHangingSeconds = userJson.optInt("totalHangingSeconds", 0),
-                    totalExplosivePullups = userJson.optInt("totalExplosivePullups", 0)
-                )
+    private suspend fun performDataRestore(jsonString: String, isRemoteSync: Boolean = false) = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject(jsonString)
+            
+            // 0. Preferences
+            val hasAccepted = json.optBoolean("has_accepted_qualifications", false)
+            preferencesManager.setHasAcceptedQualifications(hasAccepted)
+            if (hasAccepted) preferencesManager.setFirstLaunch(false)
+            
+            // 1. User
+            val userJson = json.optJSONObject("user") ?: JSONObject()
+            val importedUser = User(
+                id = 0,
+                xp = userJson.optInt("xp", 0),
+                level = userJson.optInt("level", 1),
+                streak = userJson.optInt("streak", 0),
+                rank = userJson.optString("rank", "E-Rank Hunter"),
+                pushups = userJson.optInt("pushups", 0),
+                pullups = userJson.optInt("pullups", 0),
+                plankTime = userJson.optInt("plankTime", 0),
+                totalDistanceKm = userJson.optDouble("totalDistanceKm", 0.0),
+                totalXpEarned = userJson.optInt("totalXpEarned", 0),
+                totalWorkouts = userJson.optInt("totalWorkouts", 0),
+                highestStreak = userJson.optInt("highestStreak", 0),
+                totalPromotions = userJson.optInt("totalPromotions", 0),
+                highestRank = userJson.optString("highestRank", "E-Rank Hunter"),
+                lastWorkoutDate = userJson.optLong("lastWorkoutDate", 0),
+                lastQuestRefreshDate = userJson.optLong("lastQuestRefreshDate", 0),
+                activeTitle = if (userJson.isNull("activeTitle")) null else userJson.optString("activeTitle"),
+                soundEnabled = userJson.optBoolean("soundEnabled", true),
+                maxPushupsSingleWorkout = userJson.optInt("maxPushupsSingleWorkout", 0),
+                maxPullupsSingleWorkout = userJson.optInt("maxPullupsSingleWorkout", 0),
+                maxPlankSingleWorkout = userJson.optInt("maxPlankSingleWorkout", 0),
+                maxXpSingleWorkout = userJson.optInt("maxXpSingleWorkout", 0),
+                totalPikePushups = userJson.optInt("totalPikePushups", 0),
+                totalPseudoPlanchePushups = userJson.optInt("totalPseudoPlanchePushups", 0),
+                totalHangingSeconds = userJson.optInt("totalHangingSeconds", 0),
+                totalExplosivePullups = userJson.optInt("totalExplosivePullups", 0),
+                lastQuestCompletedDate = userJson.optString("lastQuestCompletedDate", "")
+            )
 
-                // 2. Abilities
-                val abilities = mutableListOf<com.exork.app.model.Ability>()
-                if (json.has("abilities")) {
-                    val abilitiesArray = json.optJSONArray("abilities")
-                    if (abilitiesArray != null) {
-                        val currentAbilities = repository.abilities.first()
-                        currentAbilities.forEach { ab ->
-                            var isUnlocked = ab.isUnlocked
-                            for (i in 0 until abilitiesArray.length()) {
-                                val abJson = abilitiesArray.optJSONObject(i) ?: continue
-                                if (abJson.optString("name") == ab.name) {
-                                    isUnlocked = abJson.optBoolean("isUnlocked", false)
-                                    break
-                                }
-                            }
-                            abilities.add(ab.copy(isUnlocked = isUnlocked))
+            // 2. Abilities
+            val abilities = mutableListOf<Ability>()
+            val currentAbilities = repository.abilities.first()
+            if (json.has("abilities")) {
+                val abilitiesArray = json.optJSONArray("abilities") ?: JSONArray()
+                currentAbilities.forEach { ab ->
+                    var isUnlocked = ab.isUnlocked
+                    for (i in 0 until abilitiesArray.length()) {
+                        val abJson = abilitiesArray.optJSONObject(i) ?: continue
+                        if (abJson.optString("name") == ab.name) {
+                            isUnlocked = abJson.optBoolean("isUnlocked", false)
+                            break
                         }
                     }
+                    abilities.add(ab.copy(isUnlocked = isUnlocked))
                 }
+            } else {
+                abilities.addAll(currentAbilities)
+            }
 
-                // 3. Titles
-                val titles = mutableListOf<com.exork.app.model.Title>()
-                if (json.has("titles")) {
-                    val titlesArray = json.optJSONArray("titles")
-                    if (titlesArray != null) {
-                        val currentTitles = TitleData.allTitles
-                        currentTitles.forEach { t ->
-                            var isUnlocked = t.isUnlocked
-                            for (i in 0 until titlesArray.length()) {
-                                val tJson = titlesArray.optJSONObject(i) ?: continue
-                                if (tJson.optString("name") == t.name) {
-                                    isUnlocked = tJson.optBoolean("isUnlocked", false)
-                                    break
-                                }
-                            }
-                            titles.add(t.copy(isUnlocked = isUnlocked))
+            // 3. Titles
+            val titles = mutableListOf<Title>()
+            val currentTitles = TitleData.allTitles
+            if (json.has("titles")) {
+                val titlesArray = json.optJSONArray("titles") ?: JSONArray()
+                currentTitles.forEach { t ->
+                    var isUnlocked = t.isUnlocked
+                    for (i in 0 until titlesArray.length()) {
+                        val tJson = titlesArray.optJSONObject(i) ?: continue
+                        if (tJson.optString("name") == t.name) {
+                            isUnlocked = tJson.optBoolean("isUnlocked", false)
+                            break
                         }
                     }
+                    titles.add(t.copy(isUnlocked = isUnlocked))
                 }
+            } else {
+                titles.addAll(currentTitles)
+            }
 
-                // 4. Workouts
-                val workouts = mutableListOf<com.exork.app.model.WorkoutWithExercises>()
-                if (json.has("workouts")) {
-                    val workoutsArray = json.optJSONArray("workouts")
-                    if (workoutsArray != null) {
-                        for (i in 0 until workoutsArray.length()) {
-                            val wJson = workoutsArray.optJSONObject(i) ?: continue
-                            val workoutEntity = WorkoutEntity(
-                                date = wJson.optLong("date", 0),
-                                totalXpGained = wJson.optInt("totalXpGained", 0)
-                            )
-                            val exArray = wJson.optJSONArray("exercises") ?: JSONArray()
-                            val exercises = mutableListOf<ExerciseEntity>()
-                            for (j in 0 until exArray.length()) {
-                                val exJson = exArray.optJSONObject(j) ?: continue
-                                exercises.add(ExerciseEntity(
-                                    workoutId = 0,
-                                    name = exJson.optString("name", "EXERCISE"),
-                                    category = try { com.exork.app.model.ExerciseCategory.valueOf(exJson.optString("category", "OTHER")) } catch(e: Exception) { com.exork.app.model.ExerciseCategory.OTHER },
-                                    trackingType = try { com.exork.app.model.ExerciseTrackingType.valueOf(exJson.optString("trackingType", "REPS")) } catch(e: Exception) { com.exork.app.model.ExerciseTrackingType.REPS },
-                                    reps = if (exJson.isNull("reps")) null else exJson.optInt("reps"),
-                                    sets = exJson.optInt("sets", 0),
-                                    duration = if (exJson.isNull("duration")) null else exJson.optInt("duration"),
-                                    distanceKm = if (exJson.isNull("distanceKm")) null else exJson.optDouble("distanceKm")
-                                ))
-                            }
-                            workouts.add(com.exork.app.model.WorkoutWithExercises(workoutEntity, exercises))
-                        }
+            // 4. Workouts
+            val workouts = mutableListOf<com.exork.app.model.WorkoutWithExercises>()
+            if (json.has("workouts")) {
+                val workoutsArray = json.optJSONArray("workouts") ?: JSONArray()
+                for (i in 0 until workoutsArray.length()) {
+                    val wJson = workoutsArray.optJSONObject(i) ?: continue
+                    val workoutEntity = WorkoutEntity(
+                        date = wJson.optLong("date", 0),
+                        totalXpGained = wJson.optInt("totalXpGained", 0)
+                    )
+                    val exArray = wJson.optJSONArray("exercises") ?: JSONArray()
+                    val exercises = mutableListOf<ExerciseEntity>()
+                    for (j in 0 until exArray.length()) {
+                        val exJson = exArray.optJSONObject(j) ?: continue
+                        exercises.add(ExerciseEntity(
+                            workoutId = 0,
+                            name = exJson.optString("name", "EXERCISE"),
+                            category = try { com.exork.app.model.ExerciseCategory.valueOf(exJson.optString("category", "OTHER")) } catch(e: Exception) { com.exork.app.model.ExerciseCategory.OTHER },
+                            trackingType = try { com.exork.app.model.ExerciseTrackingType.valueOf(exJson.optString("trackingType", "REPS")) } catch(e: Exception) { com.exork.app.model.ExerciseTrackingType.REPS },
+                            reps = if (exJson.isNull("reps")) null else exJson.optInt("reps"),
+                            sets = exJson.optInt("sets", 0),
+                            duration = if (exJson.isNull("duration")) null else exJson.optInt("duration"),
+                            distanceKm = if (exJson.isNull("distanceKm")) null else exJson.optDouble("distanceKm")
+                        ))
                     }
+                    workouts.add(com.exork.app.model.WorkoutWithExercises(workoutEntity, exercises))
                 }
+            }
 
-                // 5. Journey Events
-                val events = mutableListOf<com.exork.app.model.JourneyEvent>()
-                if (json.has("journey_events")) {
-                    val eventsArray = json.optJSONArray("journey_events")
-                    if (eventsArray != null) {
-                        for (i in 0 until eventsArray.length()) {
-                            val evJson = eventsArray.optJSONObject(i) ?: continue
-                            events.add(com.exork.app.model.JourneyEvent(
-                                eventType = try { com.exork.app.model.JourneyEventType.valueOf(evJson.optString("eventType", "SYSTEM")) } catch(e: Exception) { com.exork.app.model.JourneyEventType.SYSTEM },
-                                title = evJson.optString("title", "EVENT"),
-                                description = evJson.optString("description", ""),
-                                timestamp = evJson.optLong("timestamp", 0),
-                                icon = evJson.optString("icon", "📍"),
-                                rarity = try { com.exork.app.model.JourneyRarity.valueOf(evJson.optString("rarity", "COMMON")) } catch(e: Exception) { com.exork.app.model.JourneyRarity.COMMON },
-                                xpReward = if (evJson.isNull("xpReward")) null else evJson.optInt("xpReward")
-                            ))
-                        }
-                    }
+            // 5. Journey Events
+            val events = mutableListOf<com.exork.app.model.JourneyEvent>()
+            if (json.has("journey_events")) {
+                val eventsArray = json.optJSONArray("journey_events") ?: JSONArray()
+                for (i in 0 until eventsArray.length()) {
+                    val evJson = eventsArray.optJSONObject(i) ?: continue
+                    events.add(com.exork.app.model.JourneyEvent(
+                        eventType = try { com.exork.app.model.JourneyEventType.valueOf(evJson.optString("eventType", "SYSTEM")) } catch(e: Exception) { com.exork.app.model.JourneyEventType.SYSTEM },
+                        title = evJson.optString("title", "EVENT"),
+                        description = evJson.optString("description", ""),
+                        timestamp = evJson.optLong("timestamp", 0),
+                        icon = evJson.optString("icon", "📍"),
+                        rarity = try { com.exork.app.model.JourneyRarity.valueOf(evJson.optString("rarity", "COMMON")) } catch(e: Exception) { com.exork.app.model.JourneyRarity.COMMON },
+                        xpReward = if (evJson.isNull("xpReward")) null else evJson.optInt("xpReward")
+                    ))
                 }
+            }
 
-                // 6. Training Days
-                val trainingDays = mutableListOf<com.exork.app.model.TrainingDay>()
-                if (json.has("training_days")) {
-                    val daysArray = json.optJSONArray("training_days")
-                    if (daysArray != null) {
-                        for (i in 0 until daysArray.length()) {
-                            val dJson = daysArray.optJSONObject(i) ?: continue
-                            trainingDays.add(com.exork.app.model.TrainingDay(
-                                dayOfWeek = dJson.optInt("dayOfWeek", 1),
-                                isCompleted = dJson.optBoolean("isCompleted", false),
-                                lastCompletedWeek = dJson.optInt("lastCompletedWeek", 0),
-                                lastCompletedYear = dJson.optInt("lastCompletedYear", 0),
-                                lastRewardWeek = dJson.optInt("lastRewardWeek", 0),
-                                lastRewardYear = dJson.optInt("lastRewardYear", 0)
-                            ))
-                        }
-                    }
+            // 6. Training Days
+            val trainingDays = mutableListOf<com.exork.app.model.TrainingDay>()
+            if (json.has("training_days")) {
+                val daysArray = json.optJSONArray("training_days") ?: JSONArray()
+                for (i in 0 until daysArray.length()) {
+                    val dJson = daysArray.optJSONObject(i) ?: continue
+                    trainingDays.add(com.exork.app.model.TrainingDay(
+                        dayOfWeek = dJson.optInt("dayOfWeek", 1),
+                        isCompleted = dJson.optBoolean("isCompleted", false),
+                        lastCompletedWeek = dJson.optInt("lastCompletedWeek", 0),
+                        lastCompletedYear = dJson.optInt("lastCompletedYear", 0),
+                        lastRewardWeek = dJson.optInt("lastRewardWeek", 0),
+                        lastRewardYear = dJson.optInt("lastRewardYear", 0)
+                    ))
                 }
+            }
 
-                // 7. Planned Exercises
-                val plannedExercises = mutableListOf<com.exork.app.model.PlannedExercise>()
-                if (json.has("planned_exercises")) {
-                    val plannedArray = json.optJSONArray("planned_exercises")
-                    if (plannedArray != null) {
-                        for (i in 0 until plannedArray.length()) {
-                            val peJson = plannedArray.optJSONObject(i) ?: continue
-                            plannedExercises.add(com.exork.app.model.PlannedExercise(
-                                dayOfWeek = peJson.optInt("dayOfWeek", 1),
-                                name = peJson.optString("name", "EXERCISE"),
-                                trackingType = try { com.exork.app.model.ExerciseTrackingType.valueOf(peJson.optString("trackingType", "REPS")) } catch(e: Exception) { com.exork.app.model.ExerciseTrackingType.REPS },
-                                sets = if (peJson.isNull("sets")) null else peJson.optInt("sets"),
-                                reps = if (peJson.isNull("reps")) null else peJson.optInt("reps"),
-                                seconds = if (peJson.isNull("seconds")) null else peJson.optInt("seconds"),
-                                distanceKm = if (peJson.isNull("distanceKm")) null else peJson.optDouble("distanceKm"),
-                                isCompleted = peJson.optBoolean("isCompleted", false),
-                                lastCompletedWeek = peJson.optInt("lastCompletedWeek", 0),
-                                lastCompletedYear = peJson.optInt("lastCompletedYear", 0)
-                            ))
-                        }
-                    }
+            // 7. Planned Exercises
+            val plannedExercises = mutableListOf<com.exork.app.model.PlannedExercise>()
+            if (json.has("planned_exercises")) {
+                val plannedArray = json.optJSONArray("planned_exercises") ?: JSONArray()
+                for (i in 0 until plannedArray.length()) {
+                    val peJson = plannedArray.optJSONObject(i) ?: continue
+                    plannedExercises.add(com.exork.app.model.PlannedExercise(
+                        dayOfWeek = peJson.optInt("dayOfWeek", 1),
+                        name = peJson.optString("name", "EXERCISE"),
+                        trackingType = try { com.exork.app.model.ExerciseTrackingType.valueOf(peJson.optString("trackingType", "REPS")) } catch(e: Exception) { com.exork.app.model.ExerciseTrackingType.REPS },
+                        sets = if (peJson.isNull("sets")) null else peJson.optInt("sets"),
+                        reps = if (peJson.isNull("reps")) null else peJson.optInt("reps"),
+                        seconds = if (peJson.isNull("seconds")) null else peJson.optInt("seconds"),
+                        distanceKm = if (peJson.isNull("distanceKm")) null else peJson.optDouble("distanceKm"),
+                        isCompleted = peJson.optBoolean("isCompleted", false),
+                        lastCompletedWeek = peJson.optInt("lastCompletedWeek", 0),
+                        lastCompletedYear = peJson.optInt("lastCompletedYear", 0)
+                    ))
                 }
+            }
 
-                // 8. Weekly Bonus
-                var weeklyBonus: com.exork.app.model.WeeklyBonusEntity? = null
-                if (json.has("weekly_bonus")) {
-                    val wbJson = json.optJSONObject("weekly_bonus")
-                    if (wbJson != null) {
-                        weeklyBonus = com.exork.app.model.WeeklyBonusEntity(
-                            lastBonusWeek = wbJson.optInt("lastBonusWeek", 0),
-                            lastBonusYear = wbJson.optInt("lastBonusYear", 0)
-                        )
-                    }
+            // 8. Weekly Bonus
+            var weeklyBonus: com.exork.app.model.WeeklyBonusEntity? = null
+            if (json.has("weekly_bonus")) {
+                val wbJson = json.optJSONObject("weekly_bonus")
+                if (wbJson != null) {
+                    weeklyBonus = com.exork.app.model.WeeklyBonusEntity(
+                        lastBonusWeek = wbJson.optInt("lastBonusWeek", 0),
+                        lastBonusYear = wbJson.optInt("lastBonusYear", 0)
+                    )
                 }
+            }
 
-                // 9. Daily Quests
-                val dailyQuestsLocal = mutableListOf<com.exork.app.model.DailyQuest>()
-                if (json.has("daily_quests")) {
-                    val questsArray = json.optJSONArray("daily_quests")
-                    if (questsArray != null) {
-                        for (i in 0 until questsArray.length()) {
-                            val qJson = questsArray.optJSONObject(i) ?: continue
-
-                            val target = when {
-                                qJson.has("targetValue") -> qJson.optInt("targetValue", 20)
-                                qJson.has("goal") -> qJson.optInt("goal", 20)
-                                qJson.has("reps") -> qJson.optInt("reps", 20)
-                                else -> 20
-                            }
-
-                            val progress = when {
-                                qJson.has("currentProgress") -> qJson.optInt("currentProgress", 0)
-                                qJson.has("progress") -> qJson.optInt("progress", 0)
-                                qJson.has("completed") -> if (qJson.optBoolean("completed", false)) target else 0
-                                else -> 0
-                            }
-
-                            dailyQuestsLocal.add(com.exork.app.model.DailyQuest(
-                                id = qJson.optInt("id", i + 1),
-                                title = qJson.optString("title", "QUEST"),
-                                currentProgress = progress,
-                                targetValue = target,
-                                xpReward = qJson.optInt("xpReward", 50),
-                                isCompleted = qJson.optBoolean("isCompleted", false)
-                            ))
-                        }
-                    }
+            // 9. Daily Quests
+            val dailyQuestsLocal = mutableListOf<com.exork.app.model.DailyQuest>()
+            if (json.has("daily_quests")) {
+                val questsArray = json.optJSONArray("daily_quests") ?: JSONArray()
+                for (i in 0 until questsArray.length()) {
+                    val qJson = questsArray.optJSONObject(i) ?: continue
+                    val target = qJson.optInt("targetValue", 20)
+                    val progress = qJson.optInt("currentProgress", 0)
+                    dailyQuestsLocal.add(com.exork.app.model.DailyQuest(
+                        id = qJson.optInt("id", i + 1),
+                        title = qJson.optString("title", "QUEST"),
+                        currentProgress = progress,
+                        targetValue = target,
+                        xpReward = qJson.optInt("xpReward", 50),
+                        isCompleted = qJson.optBoolean("isCompleted", false)
+                    ))
                 }
+            }
 
-                // 10. Notes
-                val notes = mutableListOf<com.exork.app.model.Note>()
-                if (json.has("notes")) {
-                    val notesArray = json.optJSONArray("notes")
-                    if (notesArray != null) {
-                        for (i in 0 until notesArray.length()) {
-                            val nJson = notesArray.optJSONObject(i) ?: continue
-                            notes.add(com.exork.app.model.Note(
-                                title = nJson.optString("title", "NOTE"),
-                                content = nJson.optString("content", ""),
-                                timestamp = nJson.optLong("timestamp", 0)
-                            ))
-                        }
-                    }
-                }
+            // 10. Notes (REMOVED: Sub-collection is the sole source of truth)
+            val notes = emptyList<com.exork.app.model.Note>()
 
-                // 11. Avatar Restore
-                if (json.has("avatar_base64")) {
-                    try {
-                        val base64 = json.getString("avatar_base64")
-                        val bytes = Base64.decode(base64, Base64.DEFAULT)
-                        val avatarFile = File(filesDir, "custom_avatar.jpg")
-                        avatarFile.writeBytes(bytes)
-                        preferencesManager.setAvatarUri(avatarFile.absolutePath)
-                        _avatarUri.value = avatarFile.absolutePath
-                    } catch (e: Exception) {}
-                }
+            // 11. Avatar Restore (REMOVED: Now handled by photoUrl root field in Firestore)
 
-                // Atomic Restore
-                repository.restoreDatabase(
-                    user = importedUser,
-                    abilities = abilities,
-                    workouts = workouts,
-                    titles = titles,
-                    trainingDays = trainingDays,
-                    plannedExercises = plannedExercises,
-                    weeklyBonus = weeklyBonus,
-                    journeyEvents = events,
-                    dailyQuests = dailyQuestsLocal,
-                    notes = notes
-                )
+            // Atomic Restore - WAIT for completion
+            repository.restoreDatabase(
+                user = importedUser,
+                abilities = abilities,
+                workouts = workouts,
+                titles = titles,
+                trainingDays = trainingDays,
+                plannedExercises = plannedExercises,
+                weeklyBonus = weeklyBonus,
+                journeyEvents = events,
+                dailyQuests = dailyQuestsLocal,
+                notes = notes
+            )
 
-                if (!isRemoteSync) {
-                    // If it's a local restore, push to remote immediately
-                    repository.pushBackupToFirestore(jsonString)
-                }
+            if (!isRemoteSync) {
+                repository.pushBackupToFirestore(jsonString)
+            }
 
-                // Fix: Run streak validation immediately after sync/restore
-                checkPenalty()
-
+            withContext(Dispatchers.Main) {
                 _uiEvent.emit(UiEvent.BackupSuccess(if (isRemoteSync) "Sync Complete" else "Backup Restored Successfully"))
-            } catch (e: Exception) {
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("HomeViewModel", "Restore failed", e)
+            withContext(Dispatchers.Main) {
                 _uiEvent.emit(UiEvent.BackupError("Restore failed: ${e.message}"))
             }
         }

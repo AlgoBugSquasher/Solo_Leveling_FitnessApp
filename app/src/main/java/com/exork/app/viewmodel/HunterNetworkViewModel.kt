@@ -3,6 +3,7 @@ package com.exork.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.exork.app.data.FitnessRepository
+import com.exork.app.model.HunterProfile
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -42,6 +43,9 @@ class HunterNetworkViewModel(private val repository: FitnessRepository) : ViewMo
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
+    private val _incomingManaCount = MutableStateFlow(0)
+    val incomingManaCount: StateFlow<Int> = _incomingManaCount.asStateFlow()
+
     private val _uiEvent = MutableSharedFlow<NetworkUiEvent>()
     val uiEvent = _uiEvent.asSharedFlow()
 
@@ -77,6 +81,26 @@ class HunterNetworkViewModel(private val repository: FitnessRepository) : ViewMo
                 _incomingRequests.value = it
             }
         }
+        
+        startManaListener()
+    }
+
+    private var manaListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    private fun startManaListener() {
+        val uid = currentUserId ?: return
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        manaListener = db.collection("users").document(uid)
+            .collection("incoming_mana")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                _incomingManaCount.value = snapshot?.size() ?: 0
+            }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        manaListener?.remove()
     }
 
     fun setTab(tab: NetworkTab) {
@@ -124,6 +148,34 @@ class HunterNetworkViewModel(private val repository: FitnessRepository) : ViewMo
         viewModelScope.launch {
             repository.declineAllyRequest(hunter.userId)
             _uiEvent.emit(NetworkUiEvent.ShowToast("Declined request."))
+        }
+    }
+
+    fun removeAlly(hunter: HunterProfile) {
+        viewModelScope.launch {
+            repository.removeAlly(hunter.userId)
+            _uiEvent.emit(NetworkUiEvent.ShowToast("Removed ${hunter.username ?: hunter.displayName} from allies."))
+        }
+    }
+
+    fun sendMana(hunter: HunterProfile) {
+        viewModelScope.launch {
+            val fromUsername = _currentUserProfile.value?.username ?: auth.currentUser?.displayName ?: "Hunter"
+            val success = repository.sendManaToAlly(hunter.userId, fromUsername)
+            if (success) {
+                _uiEvent.emit(NetworkUiEvent.ShowToast("Mana Sent! (+10 XP to Ally)"))
+            } else {
+                _uiEvent.emit(NetworkUiEvent.ShowToast("You have already sent Mana to this Hunter today."))
+            }
+        }
+    }
+
+    fun claimMana() {
+        viewModelScope.launch {
+            val amount = repository.claimIncomingMana()
+            if (amount > 0) {
+                _uiEvent.emit(NetworkUiEvent.ShowToast("Mana Infusion! Gained +$amount XP from Allies."))
+            }
         }
     }
 }

@@ -37,7 +37,9 @@ data class User(
     val maxPullupsSingleWorkout: Int = 0,
     val maxPlankSingleWorkout: Int = 0,
     val maxXpSingleWorkout: Int = 0,
-    val customXpEarnedToday: Int = 0
+    val customXpEarnedToday: Int = 0,
+    val lastQuestCompletedDate: String = "",
+    val photoUrl: String? = null
 ) {
     fun xpToNextLevel(): Int = XpCalculator.calculateRequiredXP(level)
 

@@ -1,6 +1,7 @@
 package com.exork.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -112,11 +114,20 @@ fun AvatarPreviewDialog(
                         .background(ObsidianVoid),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (avatarUri != null) {
-                        val avatarFile = File(avatarUri)
+                    val bitmap = remember(avatarUri, updateKey) { parseAvatarToBitmap(avatarUri) }
+                    
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Full Preview",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else if (avatarUri != null && avatarUri.startsWith("http")) {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(avatarFile)
+                                .data(avatarUri)
+                                .crossfade(true)
                                 .memoryCacheKey("${avatarUri}_$updateKey")
                                 .build(),
                             contentDescription = "Full Preview",

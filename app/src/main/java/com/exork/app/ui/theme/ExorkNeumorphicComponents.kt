@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +35,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +48,24 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.exork.app.model.User
 import java.io.File
+import android.graphics.BitmapFactory
+import android.util.Base64
+
+fun parseAvatarToBitmap(data: String?): android.graphics.Bitmap? {
+    if (data.isNullOrBlank()) return null
+    return try {
+        if (data.startsWith("data:")) {
+            val base64Data = if (data.contains(",")) data.substringAfter(",") else data
+            val decodedBytes = Base64.decode(base64Data, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        } else {
+            BitmapFactory.decodeFile(data)
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("AvatarLoader", "Failed to decode bitmap", e)
+        null
+    }
+}
 
 /**
  * 3D Obsidian Neumorphic Card with Leather Texture and Metallic Bezel.
@@ -226,11 +247,22 @@ fun ExorkProfileHeader(
                         .clickable { onAvatarClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (avatarUri != null) {
+                    val avatarData = user.photoUrl ?: avatarUri
+                    val bitmap = remember(avatarData, updateKey) { parseAvatarToBitmap(avatarData) }
+                    
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Avatar",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else if (avatarData != null && avatarData.startsWith("http")) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(File(avatarUri))
-                                .memoryCacheKey("${avatarUri}_$updateKey")
+                                .data(avatarData)
+                                .crossfade(true)
+                                .memoryCacheKey("${avatarData}_$updateKey")
                                 .build(),
                             contentDescription = "Avatar",
                             modifier = Modifier.fillMaxSize(),

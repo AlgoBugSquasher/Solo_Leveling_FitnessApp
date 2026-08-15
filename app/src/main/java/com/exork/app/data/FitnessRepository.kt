@@ -1,17 +1,29 @@
 package com.exork.app.data
 
 import com.exork.app.model.*
-import com.exork.app.viewmodel.HunterProfile
+import com.exork.app.model.HunterProfile
 import com.exork.app.util.RankCalculator
 import com.exork.app.util.XpCalculator
 import androidx.room.withTransaction
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class FitnessRepository(
     private val database: AppDatabase,
@@ -64,7 +76,6 @@ class FitnessRepository(
         notes: List<Note>
     ) {
         database.withTransaction {
-            // 1. Clear
             userDao.deleteAllUsers()
             abilityDao.deleteAllAbilities()
             workoutDao.deleteAllWorkouts()
@@ -77,21 +88,16 @@ class FitnessRepository(
             dailyQuestDao.deleteAllQuests()
             noteDao.deleteAllNotes()
 
-            // 2. Restore
             userDao.insertUser(user)
             abilityDao.insertAbilities(abilities)
-            titles.forEach { titleDao.updateTitle(it) } // titles might be pre-seeded, but we want restored state
             titleDao.insertTitles(titles)
-            
             trainingPlanDao.insertTrainingDays(trainingDays)
             trainingPlanDao.insertPlannedExercises(plannedExercises)
             weeklyBonus?.let { trainingPlanDao.insertWeeklyBonus(it) }
-            
             journeyEventDao.insertEvents(journeyEvents)
             dailyQuestDao.insertQuests(dailyQuests)
             noteDao.insertNotes(notes)
 
-            // Workouts need to preserve ID relationships
             workouts.forEach { w ->
                 workoutDao.insertWorkoutWithExercises(w.workout, w.exercises)
             }
@@ -120,20 +126,56 @@ class FitnessRepository(
         }
     }
 
-    suspend fun insertNote(note: Note) = noteDao.insertNote(note)
-    suspend fun updateNote(note: Note) = noteDao.updateNote(note)
-    suspend fun deleteNote(note: Note) = noteDao.deleteNote(note)
+    suspend fun insertNote(note: Note) {
+        noteDao.insertNote(note)
+        syncNoteToFirestore(note)
+    }
+
+    suspend fun insertNoteLocal(note: Note) {
+        noteDao.insertNote(note)
+    }
+
+    suspend fun updateNote(note: Note) {
+        noteDao.updateNote(note)
+        syncNoteToFirestore(note)
+    }
+
+    suspend fun deleteNote(note: Note) {
+        noteDao.deleteNote(note)
+        deleteNoteFromFirestore(note.id)
+    }
+
+    suspend fun deleteNoteLocal(note: Note) {
+        noteDao.deleteNote(note)
+    }
 
     suspend fun insertDailyQuests(quests: List<DailyQuest>) {
         dailyQuestDao.insertQuests(quests)
+        val currentUser = user.first()
+        if (currentUser != null) {
+            syncToFirestore(currentUser)
+        }
     }
 
     suspend fun updateDailyQuest(quest: DailyQuest) {
         dailyQuestDao.updateQuest(quest)
+        val currentUser = user.first()
+        if (currentUser != null) {
+            syncToFirestore(currentUser)
+        }
     }
 
     suspend fun clearDailyQuests() {
         dailyQuestDao.deleteAllQuests()
+        syncDailyQuestsToFirestore(emptyList())
+    }
+
+    suspend fun clearAllPlannedExercises() {
+        trainingPlanDao.deleteAllPlannedExercises()
+    }
+
+    suspend fun insertPlannedExercises(exercises: List<PlannedExercise>) {
+        trainingPlanDao.insertPlannedExercises(exercises)
     }
 
     suspend fun recordJourneyEvent(
@@ -146,32 +188,35 @@ class FitnessRepository(
         isUnique: Boolean = false
     ) {
         if (isUnique) {
-            // Simple check by eventType and title to prevent duplicates of major milestones
             val exists = allJourneyEvents.first().any { it.eventType == eventType && it.title == title }
             if (exists) return
         }
 
-        journeyEventDao.insertEvent(JourneyEvent(
+        val event = JourneyEvent(
             eventType = eventType,
             title = title,
             description = description,
             icon = icon,
             rarity = rarity,
             xpReward = xpReward
-        ))
+        )
+        journeyEventDao.insertEvent(event)
+        syncJourneyEventToFirestore(event)
     }
 
     suspend fun getEventCountByType(eventType: JourneyEventType): Int {
-        // We'll need to update Dao for this, or just use Flow
-        return allJourneyEvents.first().count { it.eventType == eventType }
+        return journeyEventDao.getEventCountByType(eventType)
     }
 
     suspend fun insertTrainingDays(days: List<TrainingDay>) {
         trainingPlanDao.insertTrainingDays(days)
+        syncTrainingPlanToFirestore(days, emptyList())
     }
 
     suspend fun updateTrainingDay(day: TrainingDay) {
         trainingPlanDao.updateTrainingDay(day)
+        val all = trainingPlanDao.getTrainingPlan().first()
+        syncTrainingPlanToFirestore(all, emptyList())
     }
 
     suspend fun insertPlannedExercise(exercise: PlannedExercise) {
@@ -249,17 +294,14 @@ class FitnessRepository(
         return false
     }
 
-    /**
-     * Unified progression system.
-     * Updates user statistics and handles level/rank progression.
-     */
     suspend fun recordProgress(
         pushups: Int = 0,
         pullups: Int = 0,
         plankSeconds: Int = 0,
         distanceKm: Double = 0.0,
         xpGained: Int = 0,
-        isWorkout: Boolean = false
+        isWorkout: Boolean = false,
+        isQuestCompletion: Boolean = false
     ) {
         val currentUser = user.first() ?: return
         
@@ -276,12 +318,10 @@ class FitnessRepository(
         var newXp = currentUser.xp + effectiveXpGained
         var newLevel = currentUser.level
         
-        // Handle Level Ups
         while (newXp >= XpCalculator.calculateRequiredXP(newLevel)) {
             newXp -= XpCalculator.calculateRequiredXP(newLevel)
             newLevel++
             
-            // Record Level Up Milestone
             recordJourneyEvent(
                 eventType = JourneyEventType.LEVEL_UP,
                 title = "LEVEL $newLevel REACHED",
@@ -306,55 +346,13 @@ class FitnessRepository(
             )
         }
 
-        // Streak calculation
-        // Daily Quest completion ALWAYS increments streak (+1)
-        // If it's a workout session (isWorkout=true), we also use standard streak logic
         val newStreak = if (xpGained >= 50 && !isWorkout) {
             currentUser.streak + 1
         } else {
             calculateNewStreak(currentUser.lastWorkoutDate, currentUser.streak)
         }
         
-        // Streak milestones
-        val streakMilestones = listOf(7, 30, 100, 365)
-        if (newStreak > currentUser.streak && newStreak in streakMilestones) {
-            recordJourneyEvent(
-                eventType = JourneyEventType.PR,
-                title = "$newStreak DAY STREAK",
-                description = "Relentless discipline. Immortal focus.",
-                icon = "🔥",
-                rarity = if (newStreak >= 100) JourneyRarity.LEGENDARY else JourneyRarity.EPIC,
-                isUnique = true
-            )
-        }
-
-        // First Workout
-        if (isWorkout && currentUser.totalWorkouts == 0) {
-            recordJourneyEvent(
-                eventType = JourneyEventType.JOURNEY_START,
-                title = "JOURNEY BEGUN",
-                description = "The first step onto the path of the Shadow Monarch.",
-                icon = "🏁",
-                rarity = JourneyRarity.RARE,
-                isUnique = true
-            )
-        }
-
-        // PR detection
-        if (pushups > currentUser.maxPushupsSingleWorkout && currentUser.totalWorkouts > 0) {
-            recordJourneyEvent(
-                eventType = JourneyEventType.PR,
-                title = "NEW PUSHUP RECORD",
-                description = "$pushups Push-ups in a single session.",
-                icon = "💪",
-                rarity = JourneyRarity.RARE
-            )
-        }
-        // Similar for pullups/plank... (omitting for brevity or can add)
-
-        // XP Milestones
-        val totalXpAfter = currentUser.totalXpEarned + effectiveXpGained
-        checkXpMilestones(currentUser.totalXpEarned, totalXpAfter)
+        val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
         val updatedUser = currentUser.copy(
             xp = newXp,
@@ -365,7 +363,7 @@ class FitnessRepository(
             pullups = currentUser.pullups + pullups,
             plankTime = currentUser.plankTime + plankSeconds,
             totalDistanceKm = currentUser.totalDistanceKm + distanceKm,
-            totalXpEarned = totalXpAfter,
+            totalXpEarned = currentUser.totalXpEarned + effectiveXpGained,
             totalWorkouts = if (isWorkout) currentUser.totalWorkouts + 1 else currentUser.totalWorkouts,
             highestStreak = maxOf(currentUser.highestStreak, newStreak),
             maxPushupsSingleWorkout = maxOf(currentUser.maxPushupsSingleWorkout, pushups),
@@ -375,16 +373,39 @@ class FitnessRepository(
             totalPromotions = if (isRankPromotion) currentUser.totalPromotions + 1 else currentUser.totalPromotions,
             highestRank = RankCalculator.getHighestRank(currentUser.highestRank, newRank),
             lastWorkoutDate = System.currentTimeMillis(),
-            customXpEarnedToday = updatedCustomXpToday
+            customXpEarnedToday = updatedCustomXpToday,
+            lastQuestCompletedDate = if (isQuestCompletion) todayDateString else currentUser.lastQuestCompletedDate
         )
 
         updateUser(updatedUser)
         checkAndUnlockAbilities(updatedUser)
-        syncToFirestore(updatedUser)
+        
+        // Forced Direct XP Flush to Firestore Root Fields
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+        if (firebaseUser != null) {
+            val db = FirebaseFirestore.getInstance()
+            try {
+                val updateMap = mutableMapOf<String, Any>(
+                    "totalXp" to updatedUser.totalXpEarned,
+                    "xp" to updatedUser.totalXpEarned,
+                    "hunterLevel" to updatedUser.level,
+                    "hunterRank" to updatedUser.rank,
+                    "currentStreak" to updatedUser.streak,
+                    "lastWorkoutDate" to updatedUser.lastWorkoutDate,
+                    "lastQuestCompletedDate" to updatedUser.lastQuestCompletedDate
+                )
+                
+                db.collection("users").document(firebaseUser.uid).update(updateMap).await()
+                
+                android.util.Log.d("EXORK_QUEST", "Quest saved. Total XP is now: ${updatedUser.totalXpEarned} on date: ${updatedUser.lastQuestCompletedDate}")
+            } catch (e: Exception) {
+                syncToFirestore(updatedUser) // Fallback
+            }
+        }
     }
 
     suspend fun checkUsernameAvailability(username: String): Boolean {
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         return try {
             val query = db.collection("users")
                 .whereEqualTo("username", username.lowercase())
@@ -398,7 +419,7 @@ class FitnessRepository(
     }
 
     suspend fun updateUsernameInFirestore(userId: String, username: String) {
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         try {
             db.collection("users").document(userId).update("username", username.lowercase(), "displayName", username).await()
         } catch (e: Exception) {
@@ -406,78 +427,256 @@ class FitnessRepository(
         }
     }
 
-    private suspend fun syncToFirestore(user: User) {
-        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        if (firebaseUser != null) {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            
-            // Try to get existing username from Firestore first to preserve it
-            val existingDoc = try { db.collection("users").document(firebaseUser.uid).get().await() } catch(e: Exception) { null }
-            val existingUsername = existingDoc?.getString("username")
-
-            val profile = mutableMapOf(
-                "userId" to firebaseUser.uid,
-                "displayName" to (existingUsername ?: firebaseUser.displayName ?: "Hunter"),
-                "hunterRank" to user.rank,
-                "hunterLevel" to user.level,
-                "totalXp" to user.totalXpEarned,
-                "currentStreak" to user.streak,
-                "lastSync" to System.currentTimeMillis()
-            )
-            if (existingUsername != null) {
-                profile["username"] = existingUsername
-            }
-
-            try {
-                db.collection("users").document(firebaseUser.uid).set(profile, com.google.firebase.firestore.SetOptions.merge())
-            } catch (e: Exception) {
-                // Silently fail or log
-            }
-        }
-    }
-
-    suspend fun pushBackupToFirestore(jsonString: String) {
-        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        if (firebaseUser != null) {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            try {
-                val data = mapOf(
-                    "backup_json" to jsonString,
-                    "lastBackupSync" to System.currentTimeMillis()
-                )
-                db.collection("users").document(firebaseUser.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
-            } catch (e: Exception) {
-                android.util.Log.e("FitnessRepository", "Backup Push Failed", e)
-            }
-        }
-    }
-
-    suspend fun fetchBackupFromFirestore(): String? {
-        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return null
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        return try {
-            val doc = db.collection("users").document(firebaseUser.uid).get().await()
-            doc.getString("backup_json")
+    suspend fun initializeUserInFirestore() {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        
+        val currentUser = user.first() ?: User()
+        
+        val profile = mutableMapOf(
+            "userId" to firebaseUser.uid,
+            "displayName" to (firebaseUser.displayName ?: "Hunter"),
+            "hunterRank" to currentUser.rank,
+            "hunterLevel" to currentUser.level,
+            "totalXp" to currentUser.totalXpEarned,
+            "currentStreak" to currentUser.streak,
+            "lastSync" to System.currentTimeMillis()
+        )
+        
+        try {
+            db.collection("users").document(firebaseUser.uid).set(profile, com.google.firebase.firestore.SetOptions.merge()).await()
         } catch (e: Exception) {
-            android.util.Log.e("FitnessRepository", "Backup Fetch Failed", e)
+            android.util.Log.e("FitnessRepository", "Initialization failed", e)
+        }
+    }
+
+    suspend fun syncToFirestore(user: User) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        
+        // Fetch current quests to include in sync
+        val quests = dailyQuestDao.getAllQuests().first()
+        val questMap = quests.associate { it.id.toString() to mapOf(
+            "id" to it.id,
+            "title" to it.title,
+            "currentProgress" to it.currentProgress,
+            "targetValue" to it.targetValue,
+            "xpReward" to it.xpReward,
+            "isCompleted" to it.isCompleted
+        )}
+
+        val plannedExercises = trainingPlanDao.getAllPlannedExercises().first()
+        val plannedMap = plannedExercises.associate { "${it.dayOfWeek}_${it.name}" to mapOf(
+            "dayOfWeek" to it.dayOfWeek,
+            "name" to it.name,
+            "trackingType" to it.trackingType.name,
+            "sets" to it.sets,
+            "reps" to it.reps,
+            "seconds" to it.seconds,
+            "distanceKm" to it.distanceKm,
+            "isCompleted" to it.isCompleted,
+            "lastCompletedWeek" to it.lastCompletedWeek,
+            "lastCompletedYear" to it.lastCompletedYear
+        )}
+
+        val profile = mutableMapOf(
+            "userId" to firebaseUser.uid,
+            "hunterRank" to user.rank,
+            "hunterLevel" to user.level,
+            "totalXp" to user.totalXpEarned,
+            "xp" to user.totalXpEarned, 
+            "currentStreak" to user.streak,
+            "lastWorkoutDate" to user.lastWorkoutDate,
+            "lastQuestRefreshDate" to user.lastQuestRefreshDate,
+            "lastQuestCompletedDate" to user.lastQuestCompletedDate,
+            "activeTitle" to user.activeTitle,
+            "soundEnabled" to user.soundEnabled,
+            "photoUrl" to user.photoUrl,
+            "dailyQuests" to questMap,
+            "plannedExercises" to plannedMap,
+            "lastSync" to System.currentTimeMillis()
+        )
+
+        try {
+            db.collection("users").document(firebaseUser.uid).set(profile, com.google.firebase.firestore.SetOptions.merge()).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Sync failed", e)
+        }
+    }
+
+    suspend fun uploadAvatar(uriString: String, context: android.content.Context): String? = withContext(Dispatchers.IO) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return@withContext null
+        try {
+            val bitmap = if (uriString.startsWith("content://")) {
+                val uri = android.net.Uri.parse(uriString)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.provider.MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+            } else {
+                android.graphics.BitmapFactory.decodeFile(uriString)
+            } ?: return@withContext null
+
+            // Scale down to max 200x200
+            val maxDimension = 200
+            val ratio = Math.min(maxDimension.toFloat() / bitmap.width, maxDimension.toFloat() / bitmap.height)
+            val width = Math.round(ratio * bitmap.width)
+            val height = Math.round(ratio * bitmap.height)
+            val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, width, height, true)
+
+            val outputStream = java.io.ByteArrayOutputStream()
+            scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, outputStream)
+            val base64Image = "data:image/jpeg;base64," + android.util.Base64.encodeToString(outputStream.toByteArray(), android.util.Base64.NO_WRAP)
+
+            // 1. Update Firestore root field
+            FirebaseFirestore.getInstance().collection("users").document(firebaseUser.uid)
+                .update("photoUrl", base64Image).await()
+
+            // 2. Update Local Room DB
+            val currentUser = user.first()
+            if (currentUser != null) {
+                updateUser(currentUser.copy(photoUrl = base64Image))
+            }
+
+            base64Image
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Avatar compression/upload failed", e)
             null
         }
     }
 
-    private suspend fun checkXpMilestones(oldXp: Int, newXp: Int) {
-        val milestones = listOf(1000, 5000, 10000, 50000, 100000)
-        milestones.forEach { m ->
-            if (oldXp < m && newXp >= m) {
-                recordJourneyEvent(
-                    eventType = JourneyEventType.XP_MILESTONE,
-                    title = "${m / 1000}K XP ACCUMULATED",
-                    description = "A massive reserve of mana has been gathered.",
-                    icon = "💎",
-                    rarity = if (m >= 10000) JourneyRarity.EPIC else JourneyRarity.RARE,
-                    isUnique = true
-                )
-            }
+    suspend fun pushBackupToFirestore(jsonString: String) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            val data = mapOf(
+                "backup_json" to jsonString,
+                "lastBackupSync" to System.currentTimeMillis()
+            )
+            db.collection("users").document(firebaseUser.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Backup Push Failed", e)
         }
+    }
+
+    suspend fun fetchBackupFromFirestore(): String? {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return null
+        val db = FirebaseFirestore.getInstance()
+        return try {
+            val doc = db.collection("users").document(firebaseUser.uid).get().await()
+            doc.getString("backup_json")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun syncNoteToFirestore(note: Note) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            db.collection("users").document(firebaseUser.uid)
+                .collection("notes").document(note.id)
+                .set(note, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Note sync failed", e)
+        }
+    }
+
+    suspend fun deleteNoteFromFirestore(noteId: String) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            db.collection("users").document(firebaseUser.uid)
+                .collection("notes").document(noteId)
+                .delete()
+                .await()
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Note deletion failed", e)
+        }
+    }
+
+    suspend fun fetchNotesFromFirestore() {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            val snapshot = db.collection("users").document(firebaseUser.uid)
+                .collection("notes").get().await()
+            val remoteNotes = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Note::class.java)
+            }
+            if (remoteNotes.isNotEmpty()) {
+                noteDao.insertNotes(remoteNotes)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Notes fetch failed", e)
+        }
+    }
+
+    suspend fun syncDailyQuestsToFirestore(quests: List<DailyQuest>) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        val questMap = quests.associate { it.id.toString() to mapOf(
+            "id" to it.id,
+            "title" to it.title,
+            "currentProgress" to it.currentProgress,
+            "targetValue" to it.targetValue,
+            "xpReward" to it.xpReward,
+            "isCompleted" to it.isCompleted
+        )}
+        try {
+            db.collection("users").document(firebaseUser.uid)
+                .update("dailyQuests", questMap).await()
+        } catch (e: Exception) {
+            db.collection("users").document(firebaseUser.uid)
+                .set(mapOf("dailyQuests" to questMap), com.google.firebase.firestore.SetOptions.merge()).await()
+        }
+    }
+
+    suspend fun syncJourneyEventToFirestore(event: JourneyEvent) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            db.collection("users").document(firebaseUser.uid)
+                .collection("journeyEvents").document(event.timestamp.toString())
+                .set(event, com.google.firebase.firestore.SetOptions.merge())
+        } catch (e: Exception) {}
+    }
+
+    suspend fun syncTrainingPlanToFirestore(days: List<TrainingDay>, exercises: List<PlannedExercise>) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        val data = mapOf(
+            "trainingPlan" to days.associate { it.dayOfWeek.toString() to it },
+            "plannedExercises" to exercises.associate { "${it.dayOfWeek}_${it.name}" to it }
+        )
+        try {
+            db.collection("users").document(firebaseUser.uid).set(data, com.google.firebase.firestore.SetOptions.merge())
+        } catch (e: Exception) {}
+    }
+
+    fun startRealTimeSync(): Flow<Unit> = callbackFlow {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: run {
+            close()
+            return@callbackFlow
+        }
+        val db = FirebaseFirestore.getInstance()
+        
+        val userListener = db.collection("users").document(firebaseUser.uid)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null || snapshot == null) return@addSnapshotListener
+                
+                val remoteUser = snapshot.toObject(User::class.java)
+                if (remoteUser != null) {
+                    database.runInTransaction {
+                        // MVP: This listener just signals changes or merges root fields
+                    }
+                }
+            }
+        
+        awaitClose { userListener.remove() }
     }
 
     private suspend fun calculateNewStreak(lastActivityDate: Long, currentStreak: Int): Int {
@@ -625,23 +824,102 @@ class FitnessRepository(
         return level
     }
 
-    private fun mapDocumentToHunterProfile(doc: com.google.firebase.firestore.DocumentSnapshot): HunterProfile? {
-        val profile = doc.toObject(HunterProfile::class.java) ?: return null
+    private fun mapDocumentToHunterProfile(doc: com.google.firebase.firestore.DocumentSnapshot): HunterProfile {
         val rawXp = doc.getLong("totalXp") ?: doc.getLong("xp") ?: 0L
         val calculatedLevel = calculateLevelFromXp(rawXp)
+        val username = doc.getString("username") ?: doc.getString("displayName") ?: "Hunter"
+        val photoUrl = doc.getString("photoUrl") ?: doc.getString("profilePicture") ?: doc.getString("photoUri") ?: ""
         
-        return profile.copy(
+        android.util.Log.d("AllyDebug", "User: $username, XP: $rawXp, Calculated Level: $calculatedLevel, Photo: $photoUrl")
+        
+        return HunterProfile(
             userId = doc.id,
-            hunterLevel = calculatedLevel,
+            displayName = doc.getString("displayName") ?: username,
+            username = username,
+            hunterLevel = doc.getLong("hunterLevel")?.toInt() ?: calculatedLevel,
             totalXp = rawXp.toInt(),
-            hunterRank = RankCalculator.calculateRank(calculatedLevel),
-            username = doc.getString("username") ?: doc.getString("displayName") ?: profile.username,
-            photoUrl = doc.getString("photoUrl") ?: doc.getString("profileImageUrl") ?: doc.getString("profilePicture") ?: doc.getString("photoUri")
+            hunterRank = doc.getString("hunterRank") ?: RankCalculator.calculateRank(calculatedLevel),
+            photoUrl = photoUrl,
+            currentStreak = doc.getLong("currentStreak")?.toInt() ?: 0,
+            activeTitle = doc.getString("activeTitle"),
+            maxPushupsSingleWorkout = doc.getLong("maxPushupsSingleWorkout")?.toInt() ?: 0,
+            maxPullupsSingleWorkout = doc.getLong("maxPullupsSingleWorkout")?.toInt() ?: 0,
+            maxPlankSingleWorkout = doc.getLong("maxPlankSingleWorkout")?.toInt() ?: 0,
+            totalWorkouts = doc.getLong("totalWorkouts")?.toInt() ?: 0,
+            totalPromotions = doc.getLong("totalPromotions")?.toInt() ?: 0
         )
     }
 
+    suspend fun removeAlly(allyUserId: String) {
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            db.runTransaction { transaction ->
+                val currentUserRef = db.collection("users").document(currentUserId)
+                val allyUserRef = db.collection("users").document(allyUserId)
+                transaction.delete(currentUserRef.collection("allies").document(allyUserId))
+                transaction.delete(allyUserRef.collection("allies").document(currentUserId))
+            }.await()
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Remove Ally Failed", e)
+        }
+    }
+
+    suspend fun sendManaToAlly(allyId: String, senderUsername: String): Boolean {
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
+        val db = FirebaseFirestore.getInstance()
+        val todayDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val manaDocRef = db.collection("users").document(allyId)
+            .collection("incoming_mana").document(currentUserId)
+
+        return try {
+            val snapshot = manaDocRef.get().await()
+            val lastSentDate = snapshot.getString("sentDate")
+            if (lastSentDate == todayDate) {
+                return false // Already sent today
+            }
+
+            val payload = mapOf(
+                "fromUserId" to currentUserId,
+                "fromUsername" to senderUsername,
+                "amount" to 10,
+                "sentDate" to todayDate,
+                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+            manaDocRef.set(payload).await()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MANA_SYNC", "Failed to send mana", e)
+            false
+        }
+    }
+
+    suspend fun claimIncomingMana(): Int {
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return 0
+        val db = FirebaseFirestore.getInstance()
+        return try {
+            val snapshot = db.collection("users").document(currentUserId)
+                .collection("incoming_mana").get().await()
+            if (snapshot.isEmpty) return 0
+
+            val totalManaGained = snapshot.documents.size * 10
+            val batch = db.batch()
+            snapshot.documents.forEach { doc ->
+                batch.delete(doc.reference)
+            }
+            batch.commit().await()
+
+            if (totalManaGained > 0) {
+                recordProgress(xpGained = totalManaGained)
+            }
+            totalManaGained
+        } catch (e: Exception) {
+            0
+        }
+    }
+
     suspend fun searchHunters(query: String): List<HunterProfile> {
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         return try {
             val snapshot = db.collection("users")
                 .whereGreaterThanOrEqualTo("username", query.lowercase())
@@ -658,14 +936,14 @@ class FitnessRepository(
     }
 
     fun getSentRequestsFlow(): Flow<List<String>> = callbackFlow {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
         if (currentUserId == null) {
             trySend(emptyList())
             close()
             return@callbackFlow
         }
 
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         val listener = db.collection("users").document(currentUserId).collection("sent_requests")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) return@addSnapshotListener
@@ -677,15 +955,14 @@ class FitnessRepository(
     }
 
     suspend fun sendAllyRequest(targetUserId: String, fromUsername: String) {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         
-        // Safety: Auto-delete invalid self-requests if they somehow exist
         if (currentUserId == targetUserId) {
             cleanupInvalidRequests(currentUserId)
             return
         }
 
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         try {
             val request = mapOf(
                 "fromUserId" to currentUserId,
@@ -699,7 +976,6 @@ class FitnessRepository(
                 val inboxRef = db.collection("users").document(targetUserId).collection("friend_requests").document(currentUserId)
                 val outboxRef = db.collection("users").document(currentUserId).collection("sent_requests").document(targetUserId)
                 
-                // Force update/overwrite with clean data
                 transaction.set(inboxRef, request, com.google.firebase.firestore.SetOptions.merge())
                 transaction.set(outboxRef, request, com.google.firebase.firestore.SetOptions.merge())
             }.await()
@@ -710,7 +986,7 @@ class FitnessRepository(
     }
 
     private suspend fun cleanupInvalidRequests(userId: String) {
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         try {
             db.collection("users").document(userId).collection("friend_requests").document(userId).delete()
             db.collection("users").document(userId).collection("sent_requests").document(userId).delete()
@@ -718,14 +994,14 @@ class FitnessRepository(
     }
 
     fun getIncomingRequestsFlow(): Flow<List<HunterProfile>> = callbackFlow {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
         if (currentUserId == null) {
             trySend(emptyList())
             close()
             return@callbackFlow
         }
 
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         var profileListener: com.google.firebase.firestore.ListenerRegistration? = null
 
         val requestsListener = db.collection("users").document(currentUserId).collection("friend_requests")
@@ -759,19 +1035,17 @@ class FitnessRepository(
     }
 
     suspend fun acceptAllyRequest(senderUserId: String) {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val db = FirebaseFirestore.getInstance()
         
         try {
             db.runTransaction { transaction ->
                 val currentUserRef = db.collection("users").document(currentUserId)
                 val senderUserRef = db.collection("users").document(senderUserId)
 
-                // 1. Add to each other's friends collection
-                transaction.set(currentUserRef.collection("friends").document(senderUserId), mapOf("userId" to senderUserId))
-                transaction.set(senderUserRef.collection("friends").document(currentUserId), mapOf("userId" to currentUserId))
+                transaction.set(currentUserRef.collection("allies").document(senderUserId), mapOf("userId" to senderUserId))
+                transaction.set(senderUserRef.collection("allies").document(currentUserId), mapOf("userId" to currentUserId))
                 
-                // 2. Delete request documents
                 transaction.delete(currentUserRef.collection("friend_requests").document(senderUserId))
                 transaction.delete(senderUserRef.collection("sent_requests").document(currentUserId))
             }.await()
@@ -781,8 +1055,8 @@ class FitnessRepository(
     }
 
     suspend fun declineAllyRequest(senderUserId: String) {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val db = FirebaseFirestore.getInstance()
         
         try {
             db.runTransaction { transaction ->
@@ -798,20 +1072,20 @@ class FitnessRepository(
     }
 
     fun getAlliesFlow(): Flow<List<HunterProfile>> = callbackFlow {
-        val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
         if (currentUserId == null) {
             trySend(emptyList())
             close()
             return@callbackFlow
         }
 
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
         var profileListener: com.google.firebase.firestore.ListenerRegistration? = null
 
-        val friendsListener = db.collection("users").document(currentUserId).collection("friends")
+        val friendsListener = db.collection("users").document(currentUserId).collection("allies")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
-                    android.util.Log.e("ALLIES_TAB_BUG", "Error listening to friends", e)
+                    android.util.Log.e("ALLIES_TAB_BUG", "Error listening to allies", e)
                     return@addSnapshotListener
                 }
                 

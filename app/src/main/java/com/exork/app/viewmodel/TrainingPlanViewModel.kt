@@ -69,6 +69,8 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
             repository.insertPlannedExercise(exercise)
             // Reset day completion status when plan changes
             resetDayCompletion(dayOfWeek)
+            // Sync to cloud to avoid stale respawns
+            syncPlanToCloud()
         }
     }
 
@@ -76,6 +78,7 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
         viewModelScope.launch {
             repository.updatePlannedExercise(exercise)
             checkDailyCompletion(exercise.dayOfWeek)
+            syncPlanToCloud()
         }
     }
 
@@ -83,6 +86,14 @@ class TrainingPlanViewModel(private val repository: FitnessRepository) : ViewMod
         viewModelScope.launch {
             repository.deletePlannedExercise(exercise)
             checkDailyCompletion(exercise.dayOfWeek)
+            syncPlanToCloud()
+        }
+    }
+
+    private suspend fun syncPlanToCloud() {
+        val currentUser = repository.user.first()
+        if (currentUser != null) {
+            repository.syncToFirestore(currentUser)
         }
     }
 

@@ -43,6 +43,7 @@ fun HunterNotesScreen(
 
     var selectedNote by remember { mutableStateOf<Note?>(null) }
     var isEditing by remember { mutableStateOf(false) }
+    var isNewNote by remember { mutableStateOf(false) }
 
     ExorkTheme {
         Scaffold(
@@ -67,6 +68,7 @@ fun HunterNotesScreen(
                         soundManager.playClick()
                         selectedNote = Note(title = "", content = "")
                         isEditing = true
+                        isNewNote = true
                     },
                     containerColor = ChromeSilver,
                     contentColor = ObsidianVoid,
@@ -141,6 +143,7 @@ fun HunterNotesScreen(
                                         soundManager.playClick()
                                         selectedNote = note
                                         isEditing = true
+                                        isNewNote = false
                                     },
                                     onDelete = {
                                         viewModel.deleteNote(note)
@@ -160,7 +163,7 @@ fun HunterNotesScreen(
                 onDismiss = { isEditing = false },
                 onSave = { updatedNote ->
                     if (updatedNote.title.isNotBlank() || updatedNote.content.isNotBlank()) {
-                        if (updatedNote.id == 0) {
+                        if (isNewNote) {
                             viewModel.addNote(updatedNote.title, updatedNote.content)
                         } else {
                             viewModel.updateNote(updatedNote)

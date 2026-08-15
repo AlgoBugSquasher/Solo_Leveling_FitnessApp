@@ -24,9 +24,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.exork.app.model.HunterProfile
 import com.exork.app.ui.theme.*
 import com.exork.app.viewmodel.LeaderboardViewModel
-import com.exork.app.viewmodel.HunterProfile
 import com.google.firebase.auth.FirebaseAuth
 
 @OptIn(ExperimentalMaterial3Api::class)

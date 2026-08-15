@@ -1,45 +1,40 @@
-package com.exork.app.receiver
+package com.exork.app.worker
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
 import com.exork.app.MainActivity
 import com.exork.app.R
 import com.exork.app.data.AppDatabase
 import com.exork.app.util.NotificationHelper
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-class NotificationReceiver : BroadcastReceiver() {
+class NotificationWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    override fun onReceive(context: Context, intent: Intent) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val db = AppDatabase.getDatabase(context)
-            val user = db.userDao().getUser().first()
-            val quests = db.dailyQuestDao().getAllQuests().first()
+    override suspend fun doWork(): Result {
+        val db = AppDatabase.getDatabase(applicationContext)
+        val user = db.userDao().getUser().first() ?: return Result.success()
+        val quests = db.dailyQuestDao().getAllQuests().first()
 
-            val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            
-            // SMART CONDITIONAL LOGIC: Only fire if incomplete and not already rewarded
-            val isCompletedToday = user?.lastQuestCompletedDate == todayDateString
-            val allQuestsDone = quests.isNotEmpty() && quests.all { it.isCompleted }
-
-            if (!isCompletedToday && !allQuestsDone) {
-                sendNotification(context)
-            }
+        val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        
+        // HARD-CHECK: Cancel notification if quest is completed today (Fail-Safe)
+        if (user.lastQuestCompletedDate == todayDateString || (quests.isNotEmpty() && quests.all { it.isCompleted })) {
+            return Result.success()
         }
+
+        sendNotification()
+        return Result.success()
     }
 
-    private fun sendNotification(context: Context) {
+    private fun sendNotification() {
+        val context = applicationContext
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = NotificationHelper.CHANNEL_ID
 
@@ -58,6 +53,6 @@ class NotificationReceiver : BroadcastReceiver() {
             .setContentIntent(pendingIntent)
             .build()
 
-        notificationManager.notify(7000, notification)
+        notificationManager.notify(7001, notification)
     }
 }

@@ -1,12 +1,12 @@
 package com.exork.app.receiver
 
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
+import androidx.work.*
+import com.exork.app.worker.NotificationWorker
 import java.util.Calendar
+import java.util.concurrent.TimeUnit
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,51 +17,31 @@ class BootReceiver : BroadcastReceiver() {
 
     companion object {
         fun scheduleDailyReminder(context: Context) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            
-            val intent = Intent(context, NotificationReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 
-                700, 
-                intent, 
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            // Standardize on WorkManager for reliable background execution and easy cancellation
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+                .build()
 
             val calendar = Calendar.getInstance().apply {
-                timeInMillis = System.currentTimeMillis()
                 set(Calendar.HOUR_OF_DAY, 19) // 7:00 PM
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
             }
+            
+            var delay = calendar.timeInMillis - System.currentTimeMillis()
+            if (delay < 0) delay += TimeUnit.DAYS.toMillis(1)
 
-            // If it's already past 7 PM, schedule for tomorrow
-            if (calendar.timeInMillis <= System.currentTimeMillis()) {
-                calendar.add(Calendar.DAY_OF_YEAR, 1)
-            }
+            val workRequest = PeriodicWorkRequestBuilder<NotificationWorker>(24, TimeUnit.HOURS)
+                .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                .setConstraints(constraints)
+                .addTag("DAILY_QUEST_REMINDER_TAG")
+                .build()
 
-            // Min SDK is 24, so setExactAndAllowWhileIdle is always available
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
-                        pendingIntent
-                    )
-                } else {
-                    // Fallback to windowed or inexact
-                    alarmManager.setAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        calendar.timeInMillis,
-                        pendingIntent
-                    )
-                }
-            } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
-                    pendingIntent
-                )
-            }
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                "DAILY_QUEST_REMINDER",
+                ExistingPeriodicWorkPolicy.REPLACE,
+                workRequest
+            )
         }
     }
 }

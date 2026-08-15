@@ -2,6 +2,7 @@ package com.exork.app.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.exork.app.model.HunterProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -11,17 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-
-data class HunterProfile(
-    val userId: String = "",
-    val displayName: String = "Unknown Hunter",
-    val username: String? = null,
-    val hunterRank: String = "E-Rank",
-    val hunterLevel: Int = 1,
-    val totalXp: Int = 0,
-    val currentStreak: Int = 0,
-    val photoUrl: String? = null
-)
 
 class LeaderboardViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()

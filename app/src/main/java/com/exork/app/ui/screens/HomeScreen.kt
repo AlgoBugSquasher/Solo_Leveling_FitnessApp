@@ -49,6 +49,7 @@ import com.exork.app.viewmodel.HomeViewModel
 import com.exork.app.viewmodel.UiEvent
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
 import java.util.*
 
 import kotlin.time.Duration.Companion.seconds
@@ -78,6 +79,7 @@ fun HomeScreen(
     val avatarUri by viewModel.avatarUri.collectAsState()
     val isTodayRestDay by viewModel.isTodayRestDay.collectAsState()
     val showRankDialog by viewModel.showRankDialog.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
 
     var avatarUpdateKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showAvatarPreview by remember { mutableStateOf(false) }
@@ -145,394 +147,412 @@ fun HomeScreen(
                         end = paddingValues.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
                     )
             ) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = 20.dp,
-                        bottom = 120.dp,
-                        start = 20.dp,
-                        end = 20.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    // 1. Hunter Header
-                    item {
-                        Box(contentAlignment = Alignment.Center) {
-                            ExorkProfileHeader(
-                                user = user,
-                                avatarUri = avatarUri,
-                                updateKey = avatarUpdateKey,
-                                username = username,
-                                onAvatarClick = { 
-                                    soundManager.playClick()
-                                    showAvatarPreview = true 
-                                },
-                                onRankClick = {
-                                    soundManager.playClick()
-                                    viewModel.openRankDialog()
-                                }
+                if (isSyncing) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = ElectricCyan)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "SYNCING HUNTER DATA...",
+                                style = ExorkTypography.labelMedium,
+                                color = TitaniumGray,
+                                letterSpacing = 2.sp
                             )
-
-                            // Floating XP Animation
-                            AnimatedVisibility(
-                                visible = floatingXpReward != null,
-                                enter = fadeIn() + expandVertically(),
-                                exit = fadeOut() + shrinkVertically()
-                            ) {
-                                if (floatingXpReward != null) {
-                                    LaunchedEffect(floatingXpReward) {
-                                        kotlinx.coroutines.delay(2.seconds)
-                                        floatingXpReward = null
-                                    }
-                                    
-                                    Box(
-                                        modifier = Modifier
-                                            .offset(y = (-40).dp)
-                                            .background(
-                                                Brush.radialGradient(
-                                                    listOf(ChromeSilver.copy(alpha = 0.4f), Color.Transparent)
-                                                ),
-                                                CircleShape
-                                            )
-                                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                                    ) {
-                                        Text(
-                                            text = "+$floatingXpReward XP GAINED!",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Black,
-                                            style = MaterialTheme.typography.headlineSmall.copy(
-                                                shadow = Shadow(Color.Black, blurRadius = 8f)
-                                            )
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
-
-                    // 2. Daily Quest Section
-                    if (quests.isNotEmpty() && quests.any { !it.isCompleted }) {
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            top = 20.dp,
+                            bottom = 120.dp,
+                            start = 20.dp,
+                            end = 20.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        // 1. Hunter Header
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                ExorkNeumorphicSectionHeader(title = "DAILY QUEST")
-                                if (isTodayRestDay) {
-                                    Text(
-                                        "REST DAY (Optional: +1 Streak & +50 XP)",
-                                        style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = ChromeSilver.copy(alpha = 0.7f),
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            ExorkNeumorphicCard {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                            Box(contentAlignment = Alignment.Center) {
+                                ExorkProfileHeader(
+                                    user = user,
+                                    avatarUri = avatarUri,
+                                    updateKey = avatarUpdateKey,
+                                    username = username,
+                                    onAvatarClick = { 
+                                        soundManager.playClick()
+                                        showAvatarPreview = true 
+                                    },
+                                    onRankClick = {
+                                        soundManager.playClick()
+                                        viewModel.openRankDialog()
+                                    }
+                                )
+
+                                // Floating XP Animation
+                                AnimatedVisibility(
+                                    visible = floatingXpReward != null,
+                                    enter = fadeIn() + expandVertically(),
+                                    exit = fadeOut() + shrinkVertically()
                                 ) {
-                                    quests.forEach { quest ->
-                                        Row(
+                                    if (floatingXpReward != null) {
+                                        LaunchedEffect(floatingXpReward) {
+                                            kotlinx.coroutines.delay(2.seconds)
+                                            floatingXpReward = null
+                                        }
+                                        
+                                        Box(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable(enabled = !quest.isCompleted) {
-                                                    soundManager.playClick()
-                                                    viewModel.toggleQuestProgress(quest.id)
-                                                },
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                                .offset(y = (-40).dp)
+                                                .background(
+                                                    Brush.radialGradient(
+                                                        listOf(ChromeSilver.copy(alpha = 0.4f), Color.Transparent)
+                                                    ),
+                                                    CircleShape
+                                                )
+                                                .padding(horizontal = 16.dp, vertical = 8.dp)
                                         ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    quest.title.uppercase(), 
-                                                    style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black), 
-                                                    color = Color.White
-                                                )
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                ExorkNeumorphicProgressBar(
-                                                    progress = quest.getProgressPercentage()
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(16.dp))
                                             Text(
-                                                "[ ${quest.targetValue} ]",
-                                                style = ExorkTypography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                                color = ChromeSilver
+                                                text = "+$floatingXpReward XP GAINED!",
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Black,
+                                                style = MaterialTheme.typography.headlineSmall.copy(
+                                                    shadow = Shadow(Color.Black, blurRadius = 8f)
+                                                )
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
 
-                                    // CLAIM REWARD button if all targets met
-                                    if (quests.all { it.currentProgress >= it.targetValue && !it.isCompleted }) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        ExorkGlowingChromeButton(
-                                            text = "CLAIM REWARD (+50 XP)",
-                                            onClick = {
-                                                soundManager.playLevelUp()
-                                                viewModel.claimDailyQuestReward()
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
+                        // 2. Daily Quest Section
+                    val todayDateString = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                    val isQuestDoneToday = user.lastQuestCompletedDate == todayDateString
+
+                    if (quests.isNotEmpty() && quests.any { !it.isCompleted } && !isQuestDoneToday) {
+                        item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    ExorkNeumorphicSectionHeader(title = "DAILY QUEST")
+                                    if (isTodayRestDay) {
+                                        Text(
+                                            "REST DAY (Optional: +1 Streak & +50 XP)",
+                                            style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = ChromeSilver.copy(alpha = 0.7f),
+                                            modifier = Modifier.padding(bottom = 4.dp)
                                         )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                ExorkNeumorphicCard {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        quests.forEach { quest ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable(enabled = !quest.isCompleted) {
+                                                        soundManager.playClick()
+                                                        viewModel.toggleQuestProgress(quest.id)
+                                                    },
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        quest.title.uppercase(), 
+                                                        style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black), 
+                                                        color = Color.White
+                                                    )
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    ExorkNeumorphicProgressBar(
+                                                        progress = quest.getProgressPercentage()
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text(
+                                                    "[ ${quest.targetValue} ]",
+                                                    style = ExorkTypography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = ChromeSilver
+                                                )
+                                            }
+                                        }
+
+                                        // CLAIM REWARD button if all targets met
+                                        if (quests.all { it.currentProgress >= it.targetValue && !it.isCompleted }) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            ExorkGlowingChromeButton(
+                                                text = "CLAIM REWARD (+50 XP)",
+                                                onClick = {
+                                                    soundManager.playLevelUp()
+                                                    viewModel.claimDailyQuestReward()
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // 3. Primary CTA
-                    item {
-                        ExorkChromeButton(
-                            text = "TODAY'S TRAINING",
-                            onClick = {
-                                soundManager.playClick()
-                                onOpenTodayTraining()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                        // 3. Primary CTA
+                        item {
+                            ExorkChromeButton(
+                                text = "TODAY'S TRAINING",
+                                onClick = {
+                                    soundManager.playClick()
+                                    onOpenTodayTraining()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
 
-                    // 5. Operation Hub
-                    item {
-                        ExorkNeumorphicSectionHeader(title = "Operation Hub")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ExorkNeumorphicHubCard(
-                                title = "Custom\nTraining",
-                                icon = Icons.Default.FitnessCenter,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenCustomTraining()
-                                }
-                            )
-                            ExorkNeumorphicHubCard(
-                                title = "Hunter\nNotes",
-                                icon = Icons.Default.AutoStories,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenHunterNotes()
-                                }
-                            )
+                        // 5. Operation Hub
+                        item {
+                            ExorkNeumorphicSectionHeader(title = "Operation Hub")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ExorkNeumorphicHubCard(
+                                    title = "Custom\nTraining",
+                                    icon = Icons.Default.FitnessCenter,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenCustomTraining()
+                                    }
+                                )
+                                ExorkNeumorphicHubCard(
+                                    title = "Hunter\nNotes",
+                                    icon = Icons.Default.AutoStories,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenHunterNotes()
+                                    }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ExorkNeumorphicHubCard(
+                                    title = "Hunter\nJourney",
+                                    icon = Icons.Default.Map,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenHunterJourney()
+                                    }
+                                )
+                                ExorkNeumorphicHubCard(
+                                    title = "Hunter\nStats",
+                                    icon = Icons.Default.Analytics,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenStatistics()
+                                    }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ExorkNeumorphicHubCard(
+                                    title = "Global\nLeaderboard",
+                                    icon = Icons.Default.EmojiEvents,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenLeaderboard()
+                                    }
+                                )
+                                ExorkNeumorphicHubCard(
+                                    title = "Hunter\nNetwork",
+                                    icon = Icons.Default.Group,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenNetwork()
+                                    }
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ExorkNeumorphicHubCard(
-                                title = "Hunter\nJourney",
-                                icon = Icons.Default.Map,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenHunterJourney()
-                                }
-                            )
-                            ExorkNeumorphicHubCard(
-                                title = "Hunter\nStats",
-                                icon = Icons.Default.Analytics,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenStatistics()
-                                }
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ExorkNeumorphicHubCard(
-                                title = "Global\nLeaderboard",
-                                icon = Icons.Default.EmojiEvents,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenLeaderboard()
-                                }
-                            )
-                            ExorkNeumorphicHubCard(
-                                title = "Hunter\nNetwork",
-                                icon = Icons.Default.Group,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenNetwork()
-                                }
-                            )
-                        }
-                    }
 
-                    // 5.1 Hunter Vault (Refactored Layout)
-                    item {
-                        ExorkNeumorphicSectionHeader(title = "Hunter Vault")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        
-                        // Tier 1: 50/50 Split for Archive and Titles
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            ExorkNeumorphicHubCard(
-                                title = "Archive",
-                                icon = Icons.Default.Inventory2,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenHunterArchive()
-                                }
-                            )
-                            ExorkNeumorphicHubCard(
-                                title = "Titles",
-                                icon = Icons.Default.MilitaryTech,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    soundManager.playClick()
-                                    onOpenTitles()
-                                }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(10.dp))
-                        
-                        // Tier 2: Full Width Achievements
-                        ExorkNeumorphicCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                soundManager.playClick()
-                                onOpenAchievements()
-                            },
-                            cornerRadius = 24.dp
-                        ) {
+                        // 5.1 Hunter Vault (Refactored Layout)
+                        item {
+                            ExorkNeumorphicSectionHeader(title = "Hunter Vault")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            // Tier 1: 50/50 Split for Archive and Titles
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = ChromeSilver,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(16.dp))
-                                    Column {
-                                        Text(
-                                            "ACHIEVEMENTS",
-                                            style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            "View Unlocked Badges & Milestones",
-                                            style = ExorkTypography.labelSmall,
-                                            color = TitaniumGray
-                                        )
+                                ExorkNeumorphicHubCard(
+                                    title = "Archive",
+                                    icon = Icons.Default.Inventory2,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenHunterArchive()
                                     }
+                                )
+                                ExorkNeumorphicHubCard(
+                                    title = "Titles",
+                                    icon = Icons.Default.MilitaryTech,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        soundManager.playClick()
+                                        onOpenTitles()
+                                    }
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // Tier 2: Full Width Achievements
+                            ExorkNeumorphicCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    soundManager.playClick()
+                                    onOpenAchievements()
+                                },
+                                cornerRadius = 24.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.EmojiEvents,
+                                            contentDescription = null,
+                                            tint = ChromeSilver,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Column {
+                                            Text(
+                                                "ACHIEVEMENTS",
+                                                style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                                color = Color.White
+                                            )
+                                            Text(
+                                                "View Unlocked Badges & Milestones",
+                                                style = ExorkTypography.labelSmall,
+                                                color = TitaniumGray
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = TitaniumGray
+                                    )
                                 }
-                                Icon(
-                                    imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = TitaniumGray
+                            }
+                        }
+
+                        // 6. Hunter Stats Summary
+                        item {
+                            ExorkNeumorphicSectionHeader(title = "Hunter Status")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            ExorkNeumorphicStatCard(
+                                label = "Current Streak",
+                                value = "${user.streak} DAYS",
+                                icon = Icons.Default.LocalFireDepartment
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                ExorkNeumorphicStatCard(
+                                    label = "Total XP",
+                                    value = user.totalXpEarned.toString(),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                ExorkNeumorphicStatCard(
+                                    label = "Weekly XP",
+                                    value = weeklyXp.toString(),
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
-                    }
 
-                    // 6. Hunter Stats Summary
-                    item {
-                        ExorkNeumorphicSectionHeader(title = "Hunter Status")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        ExorkNeumorphicStatCard(
-                            label = "Current Streak",
-                            value = "${user.streak} DAYS",
-                            icon = Icons.Default.LocalFireDepartment
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ExorkNeumorphicStatCard(
-                                label = "Total XP",
-                                value = user.totalXpEarned.toString(),
-                                modifier = Modifier.weight(1f)
-                            )
-                            ExorkNeumorphicStatCard(
-                                label = "Weekly XP",
-                                value = weeklyXp.toString(),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
+                        // 7. Achievement Preview
+                        item {
+                            ExorkNeumorphicSectionHeader(title = "Latest Achievement")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            ExorkNeumorphicCard(modifier = Modifier.fillMaxWidth()) {
+                                if (latestAchievement != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .background(ObsidianVoid, CircleShape)
+                                                .border(1.5.dp, ChromeSilver, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("🏆", fontSize = 28.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(20.dp))
+                                        Column {
+                                            Text(latestAchievement!!.name.uppercase(), style = ExorkTypography.titleLarge, color = Color.White)
+                                            Text("ACHIEVEMENT UNLOCKED", style = ExorkTypography.labelMedium, color = TitaniumGray)
+                                        }
+                                    }
 
-                    // 7. Achievement Preview
-                    item {
-                        ExorkNeumorphicSectionHeader(title = "Latest Achievement")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        ExorkNeumorphicCard(modifier = Modifier.fillMaxWidth()) {
-                            if (latestAchievement != null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(60.dp)
-                                            .background(ObsidianVoid, CircleShape)
-                                            .border(1.5.dp, ChromeSilver, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("🏆", fontSize = 28.sp)
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    Text(
+                                        latestAchievement!!.description,
+                                        style = ExorkTypography.bodyLarge,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(20.dp))
+
+                                    ExorkNeumorphicProgressBar(
+                                        progress = 1f,
+                                        label = "STATUS",
+                                        subLabel = "COMPLETED"
+                                    )
+                                } else {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .background(ObsidianVoid, CircleShape)
+                                                .border(1.5.dp, ChromeSilver, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("🔒", fontSize = 28.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(20.dp))
+                                        Column {
+                                            Text("NO ACHIEVEMENT YET", style = ExorkTypography.titleLarge, color = Color.White)
+                                            Text("Every Hunter starts from E-Rank.", style = ExorkTypography.labelMedium, color = TitaniumGray)
+                                        }
                                     }
-                                    Spacer(modifier = Modifier.width(20.dp))
-                                    Column {
-                                        Text(latestAchievement!!.name.uppercase(), style = ExorkTypography.titleLarge, color = Color.White)
-                                        Text("ACHIEVEMENT UNLOCKED", style = ExorkTypography.labelMedium, color = TitaniumGray)
-                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
+
+                                    Text(
+                                        "Complete your first workout to unlock your first achievement.",
+                                        style = ExorkTypography.bodyLarge,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(20.dp))
+
+                                    ExorkNeumorphicProgressBar(
+                                        progress = 0f,
+                                        label = "PROGRESS",
+                                        subLabel = "0 / 1 WORKOUT"
+                                    )
                                 }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Text(
-                                    latestAchievement!!.description,
-                                    style = ExorkTypography.bodyLarge,
-                                    color = Color.White.copy(alpha = 0.8f)
-                                )
-
-                                Spacer(modifier = Modifier.height(20.dp))
-
-                                ExorkNeumorphicProgressBar(
-                                    progress = 1f,
-                                    label = "STATUS",
-                                    subLabel = "COMPLETED"
-                                )
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(60.dp)
-                                            .background(ObsidianVoid, CircleShape)
-                                            .border(1.5.dp, ChromeSilver, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("🔒", fontSize = 28.sp)
-                                    }
-                                    Spacer(modifier = Modifier.width(20.dp))
-                                    Column {
-                                        Text("NO ACHIEVEMENT YET", style = ExorkTypography.titleLarge, color = Color.White)
-                                        Text("Every Hunter starts from E-Rank.", style = ExorkTypography.labelMedium, color = TitaniumGray)
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Text(
-                                    "Complete your first workout to unlock your first achievement.",
-                                    style = ExorkTypography.bodyLarge,
-                                    color = Color.White.copy(alpha = 0.7f)
-                                )
-
-                                Spacer(modifier = Modifier.height(20.dp))
-
-                                ExorkNeumorphicProgressBar(
-                                    progress = 0f,
-                                    label = "PROGRESS",
-                                    subLabel = "0 / 1 WORKOUT"
-                                )
                             }
                         }
                     }
@@ -542,7 +562,7 @@ fun HomeScreen(
 
         if (showAvatarPreview) {
             AvatarPreviewDialog(
-                avatarUri = avatarUri,
+                avatarUri = user.photoUrl ?: avatarUri,
                 updateKey = avatarUpdateKey,
                 onDismiss = { showAvatarPreview = false },
                 onEdit = {
@@ -679,4 +699,3 @@ fun ExorkNavItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: S
         }
     }
 }
-

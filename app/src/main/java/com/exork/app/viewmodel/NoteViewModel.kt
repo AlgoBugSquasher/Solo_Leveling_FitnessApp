@@ -14,6 +14,51 @@ class NoteViewModel(private val repository: FitnessRepository) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
+    private var notesListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    init {
+        startRealTimeNotesListener()
+    }
+
+    private fun startRealTimeNotesListener() {
+        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        
+        notesListener = db.collection("users").document(firebaseUser.uid)
+            .collection("notes")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                
+                val remoteNotes = snapshot.documents.mapNotNull { doc ->
+                    doc.toObject(Note::class.java)
+                }
+
+                viewModelScope.launch {
+                    val existingNotes = repository.allNotes.first()
+                    
+                    // 1. Sync remote additions/updates to local
+                    remoteNotes.forEach { remoteNote ->
+                        val localMatch = existingNotes.find { it.id == remoteNote.id }
+                        if (localMatch == null || localMatch != remoteNote) {
+                            repository.insertNoteLocal(remoteNote)
+                        }
+                    }
+                    
+                    // 2. Sync remote deletions to local
+                    existingNotes.forEach { localNote ->
+                        if (remoteNotes.none { it.id == localNote.id }) {
+                            repository.deleteNoteLocal(localNote)
+                        }
+                    }
+                }
+            }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        notesListener?.remove()
+    }
+
     val notes: StateFlow<List<Note>> = _searchQuery
         .flatMapLatest { query ->
             if (query.isEmpty()) {

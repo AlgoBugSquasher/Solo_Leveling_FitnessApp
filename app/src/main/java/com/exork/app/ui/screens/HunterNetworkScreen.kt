@@ -1,9 +1,12 @@
 package com.exork.app.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,16 +14,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -28,12 +36,14 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.exork.app.model.HunterProfile
+import com.exork.app.ui.components.HunterProfileInspectDialog
 import com.exork.app.ui.theme.*
 import com.exork.app.viewmodel.HunterNetworkViewModel
-import com.exork.app.viewmodel.HunterProfile
 import com.exork.app.viewmodel.NetworkTab
 import com.exork.app.viewmodel.NetworkUiEvent
 import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.ui.graphics.asImageBitmap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +59,12 @@ fun HunterNetworkScreen(
     val sentRequestIds by viewModel.sentRequestIds.collectAsState()
     val incomingRequests by viewModel.incomingRequests.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val incomingManaCount by viewModel.incomingManaCount.collectAsState()
+
+    var selectedHunter by remember { mutableStateOf<HunterProfile?>(null) }
+    var showInspectDialog by remember { mutableStateOf(false) }
+    var showAllyActions by remember { mutableStateOf(false) }
+    var showRemoveConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
@@ -99,6 +115,40 @@ fun HunterNetworkScreen(
                 )
             }
 
+            // Mana Infusion Banner
+            AnimatedVisibility(visible = incomingManaCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { viewModel.claimMana() },
+                    color = ElectricCyan.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Bolt, null, tint = ElectricCyan)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "MANA INFUSION DETECTED",
+                                style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black),
+                                color = ElectricCyan
+                            )
+                        }
+                        Text(
+                            "CLAIM +${incomingManaCount * 10} XP",
+                            style = ExorkTypography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
             if (currentTab == NetworkTab.FIND) {
                 // Search Bar
                 OutlinedTextField(
@@ -136,7 +186,12 @@ fun HunterNetworkScreen(
                         HunterResultCard(
                             hunter = hunter,
                             isAlly = isAlly,
-                            isRequested = isRequested
+                            isRequested = isRequested,
+                            onClick = {
+                                selectedHunter = hunter
+                                showInspectDialog = true
+                            },
+                            onSendMana = { viewModel.sendMana(hunter) }
                         ) {
                             if (!isAlly && !isRequested) {
                                 viewModel.sendAllyRequest(hunter)
@@ -187,10 +242,142 @@ fun HunterNetworkScreen(
                         }
                     }
                     items(allies) { ally ->
-                        HunterResultCard(ally, isAlly = true) {}
+                        HunterResultCard(
+                            hunter = ally, 
+                            isAlly = true, 
+                            onClick = {
+                                selectedHunter = ally
+                                showAllyActions = true
+                            },
+                            onSendMana = { viewModel.sendMana(ally) }
+                        ) {}
                     }
                 }
             }
+        }
+
+        // Ally Actions Bottom Sheet
+        if (showAllyActions && selectedHunter != null) {
+            ModalBottomSheet(
+                onDismissRequest = { showAllyActions = false },
+                containerColor = LeatherDark,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = ChromeSilver.copy(alpha = 0.4f)) }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .padding(bottom = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        (selectedHunter!!.username ?: selectedHunter!!.displayName).uppercase(),
+                        style = ExorkTypography.titleLarge.copy(fontWeight = FontWeight.Black),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Button(
+                        onClick = {
+                            showAllyActions = false
+                            showInspectDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ChromeSilver, contentColor = Color.Black),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("VIEW DOSSIER", style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    OutlinedButton(
+                        onClick = {
+                            showAllyActions = false
+                            showRemoveConfirm = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("REMOVE ALLY", color = Color.Red, style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    ExorkChromeButton(
+                        text = "SEND MANA (+10 XP)",
+                        height = 56.dp,
+                        onClick = {
+                            showAllyActions = false
+                            viewModel.sendMana(selectedHunter!!)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // Inspect Dialog
+        if (showInspectDialog && selectedHunter != null) {
+            val hunter = selectedHunter!!
+            val isAlly = allies.any { it.userId == hunter.userId }
+            val isRequested = sentRequestIds.contains(hunter.userId)
+
+            HunterProfileInspectDialog(
+                profile = hunter,
+                onDismiss = { showInspectDialog = false }
+            ) {
+                // Action Button inside dialog - CONDITIONAL LOGIC
+                if (hunter.userId != viewModel.currentUserId && !isAlly) {
+                    if (isRequested) {
+                        // Subtle disabled "REQUEST PENDING" pill
+                        Surface(
+                            modifier = Modifier.height(44.dp).fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = ObsidianVoid.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("REQUEST PENDING", style = ExorkTypography.labelLarge, color = Color.Gray)
+                            }
+                        }
+                    } else {
+                        // Compact "SEND ALLY REQUEST" button
+                        ExorkChromeButton(
+                            text = "SEND ALLY REQUEST", 
+                            height = 44.dp,
+                            onClick = {
+                                viewModel.sendAllyRequest(hunter)
+                            }, 
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+
+        // Remove Confirmation
+        if (showRemoveConfirm && selectedHunter != null) {
+            AlertDialog(
+                onDismissRequest = { showRemoveConfirm = false },
+                containerColor = ObsidianVoid,
+                title = { Text("REMOVE ALLY?", color = Color.White, fontWeight = FontWeight.Black) },
+                text = { Text("Are you sure you want to remove ${selectedHunter!!.username ?: selectedHunter!!.displayName} from your network?", color = TitaniumGray) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.removeAlly(selectedHunter!!)
+                        showRemoveConfirm = false
+                    }) {
+                        Text("CONFIRM", color = Color.Red, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRemoveConfirm = false }) {
+                        Text("CANCEL", color = ChromeSilver)
+                    }
+                }
+            )
         }
     }
 }
@@ -236,9 +423,13 @@ fun TabItem(text: String, isSelected: Boolean, modifier: Modifier, badgeCount: I
 @Composable
 fun HunterAvatar(hunter: HunterProfile, modifier: Modifier = Modifier) {
     val currentUserId = remember { FirebaseAuth.getInstance().currentUser?.uid }
-    val photoSource = remember(hunter) {
+    val photoSource = remember(hunter.photoUrl, hunter.userId) {
         hunter.photoUrl.takeIf { !it.isNullOrBlank() } ?: 
         if (hunter.userId == currentUserId) FirebaseAuth.getInstance().currentUser?.photoUrl?.toString() else null
+    }
+
+    val hunterBitmap = remember(photoSource) {
+        parseAvatarToBitmap(photoSource)
     }
 
     Box(
@@ -248,7 +439,14 @@ fun HunterAvatar(hunter: HunterProfile, modifier: Modifier = Modifier) {
             .border(1.5.dp, ChromeSilver.copy(alpha = 0.4f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        if (!photoSource.isNullOrBlank()) {
+        if (hunterBitmap != null) {
+            Image(
+                bitmap = hunterBitmap.asImageBitmap(),
+                contentDescription = "Hunter Profile Avatar",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else if (photoSource != null && photoSource.startsWith("http")) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(photoSource)
@@ -321,11 +519,14 @@ fun HunterResultCard(
     hunter: HunterProfile,
     isAlly: Boolean = false,
     isRequested: Boolean = false,
+    onClick: () -> Unit = {},
+    onSendMana: () -> Unit = {},
     onAdd: () -> Unit
 ) {
     ExorkNeumorphicCard(
         modifier = Modifier.fillMaxWidth(),
-        borderColor = if (isAlly) Color.Green.copy(alpha = 0.3f) else null
+        borderColor = if (isAlly) Color.Green.copy(alpha = 0.3f) else null,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier.padding(8.dp),
@@ -353,10 +554,11 @@ fun HunterResultCard(
             
             when {
                 isAlly -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Check, null, tint = Color.Green, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("ALLY", color = Color.Green, style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                    IconButton(
+                        onClick = onSendMana,
+                        modifier = Modifier.size(40.dp).background(ElectricCyan.copy(alpha = 0.1f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Bolt, "Send Mana", tint = ElectricCyan, modifier = Modifier.size(20.dp))
                     }
                 }
                 isRequested -> {
