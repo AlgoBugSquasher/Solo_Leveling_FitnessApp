@@ -184,7 +184,7 @@ fun StatCard(label: String, value: Int, modifier: Modifier = Modifier) {
     val animatedValue = remember { Animatable(0f) }
     
     LaunchedEffect(value) {
-        animatedValue.animateTo(value.toFloat(), animationSpec = tween(1500))
+        animatedValue.animateTo(value.toFloat(), animationSpec = tween(750))
     }
 
     ExorkNeumorphicCard(

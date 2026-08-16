@@ -187,9 +187,14 @@ fun ExorkNeumorphicProgressBar(
                 .border(1.dp, ChromeSilver.copy(alpha = 0.3f), CircleShape)
                 .padding(2.dp)
         ) {
+            val animatedProgress by animateFloatAsState(
+                targetValue = progress.coerceIn(0f, 1f),
+                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing),
+                label = "ProgressAnimation"
+            )
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress.coerceIn(0f, 1f))
+                    .fillMaxWidth(animatedProgress)
                     .fillMaxHeight()
                     .background(
                         Brush.linearGradient(
@@ -216,13 +221,13 @@ fun ExorkProfileHeader(
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = user.getProgressPercentage(),
-        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
         label = "LevelProgress"
     )
     
     val animatedXp by animateIntAsState(
         targetValue = user.xp,
-        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        animationSpec = tween(250, easing = FastOutSlowInEasing),
         label = "XpProgress"
     )
 

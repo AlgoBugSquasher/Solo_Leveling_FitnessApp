@@ -43,4 +43,5 @@ val DeepSlateNav = Color(0xFF080A0F)
 
 // Advanced Rank Accents (Boosted)
 val DeepManaBlue = Color(0xFF2E90FF)
+val NeonBlue = Color(0xFF007FFF)
 val ManaGold = Color(0xFFFFB800)

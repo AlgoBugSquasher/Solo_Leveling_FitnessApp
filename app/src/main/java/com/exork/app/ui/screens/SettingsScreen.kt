@@ -1,7 +1,5 @@
 package com.exork.app.ui.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,199 +8,36 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.exork.app.ui.theme.*
 import com.exork.app.util.SoundManager
 import com.exork.app.viewmodel.HomeViewModel
-import com.exork.app.viewmodel.UiEvent
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.collectLatest
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: HomeViewModel,
     onViewAbout: () -> Unit,
+    onLogout: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val user by viewModel.user.collectAsState()
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-
-    var showRestoreConfirm by remember { mutableStateOf(false) }
-    var pendingRestoreData by remember { mutableStateOf<String?>(null) }
-
-    val createBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let {
-            coroutineScope.launch {
-                try {
-                    val data = viewModel.exportData()
-                    if (data.isNotBlank()) {
-                        withContext(Dispatchers.IO) {
-                            context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                                OutputStreamWriter(outputStream).use { writer ->
-                                    writer.write(data)
-                                }
-                            }
-                        }
-                        snackbarHostState.showSnackbar("Backup Saved Successfully")
-                    }
-                } catch (e: Exception) {
-                    snackbarHostState.showSnackbar("Save Failed: ${e.message}")
-                }
-            }
-        }
-    }
-
-    val restoreBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let {
-            try {
-                context.contentResolver.openInputStream(it)?.use { inputStream ->
-                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        val data = reader.readText()
-                        pendingRestoreData = data
-                        showRestoreConfirm = true
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    LaunchedEffect(viewModel.uiEvent) {
-        viewModel.uiEvent.collectLatest { event ->
-            when (event) {
-                is UiEvent.BackupSuccess -> snackbarHostState.showSnackbar(event.message)
-                is UiEvent.BackupError -> snackbarHostState.showSnackbar(event.message)
-                else -> {}
-            }
-        }
-    }
-
-    if (showRestoreConfirm) {
-        Dialog(
-            onDismissRequest = { showRestoreConfirm = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .shadow(elevation = 24.dp, shape = RoundedCornerShape(20.dp), ambientColor = Color.Black),
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xCC0D0D12),
-                border = BorderStroke(
-                    1.5.dp,
-                    Brush.linearGradient(
-                        listOf(ChromeSilver, Color(0xFF3A3A3E))
-                    )
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "Restore Progress?",
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            shadow = Shadow(Color.Black, blurRadius = 8f)
-                        )
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Text(
-                        "This will overwrite your current progress with the data from the backup file. This action cannot be undone.",
-                        color = TitaniumGray,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(32.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // CANCEL BUTTON
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clickable { 
-                                    soundManager.playClick()
-                                    showRestoreConfirm = false 
-                                },
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color.Black.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, ChromeSilver.copy(alpha = 0.3f))
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("CANCEL", color = TitaniumGray, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            }
-                        }
-                        
-                        // RESTORE BUTTON
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .clickable {
-                                    soundManager.playSystemAcceptSound()
-                                    pendingRestoreData?.let { viewModel.importData(it) }
-                                    showRestoreConfirm = false
-                                    pendingRestoreData = null
-                                },
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color.Black.copy(alpha = 0.3f),
-                            border = BorderStroke(
-                                1.dp,
-                                Brush.linearGradient(listOf(ChromeSilver, Color(0xFF4A4A50)))
-                            )
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("RESTORE", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -219,7 +54,6 @@ fun SettingsScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = ObsidianVoid
     ) { padding ->
         Box(
@@ -257,37 +91,6 @@ fun SettingsScreen(
                 item { Spacer(modifier = Modifier.height(8.dp)) }
 
                 item {
-                    SettingsSectionTitle("DATA MANAGEMENT")
-                }
-
-                item {
-                    SettingsActionItem(
-                        title = "Create Backup",
-                        subtitle = "Export progress to JSON",
-                        icon = Icons.Default.Save,
-                        onClick = {
-                            soundManager.playClick()
-                            val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault()).format(Date())
-                            createBackupLauncher.launch("HunterBackup_$dateStr.json")
-                        }
-                    )
-                }
-
-                item {
-                    SettingsActionItem(
-                        title = "Restore Backup",
-                        subtitle = "Import from previously saved file",
-                        icon = Icons.Default.Restore,
-                        onClick = {
-                            soundManager.playClick()
-                            restoreBackupLauncher.launch(arrayOf("application/json"))
-                        }
-                    )
-                }
-
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-
-                item {
                     SettingsSectionTitle("APPLICATION")
                 }
 
@@ -302,7 +105,79 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+
+                item {
+                    SettingsSectionTitle("ACCOUNT")
+                }
+
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0x22FF3344),
+                        border = BorderStroke(1.dp, Color(0x66FF3344)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLogoutDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = "Log Out",
+                                tint = Color(0xFFFF4455),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Log Out",
+                                    style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black),
+                                    color = Color(0xFFFF4455)
+                                )
+                                Text(
+                                    text = "Sign out from this Hunter device",
+                                    style = ExorkTypography.labelSmall,
+                                    color = TitaniumGray
+                                )
+                            }
+                        }
+                    }
+                }
             }
+        }
+
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                containerColor = Color(0xFF0F0F16),
+                title = {
+                    Text("SYSTEM LOGOUT", color = Color.White, fontWeight = FontWeight.Black)
+                },
+                text = {
+                    Text("Are you sure you want to end your hunter session?", color = TitaniumGray)
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showLogoutDialog = false
+                            onLogout()
+                        }
+                    ) {
+                        Text("LOG OUT", color = Color(0xFFFF4455), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text("CANCEL", color = TitaniumGray)
+                    }
+                }
+            )
         }
     }
 }

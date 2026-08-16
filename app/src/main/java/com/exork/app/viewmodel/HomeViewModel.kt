@@ -92,10 +92,30 @@ class HomeViewModel(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _floatingXpReward = MutableStateFlow<Int?>(null)
+    val floatingXpReward: StateFlow<Int?> = _floatingXpReward.asStateFlow()
+
     private var userSnapshotListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     fun dismissQuestDialog() {
         _shouldShowQuestDialog.value = false
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            // 1. Force state reset FIRST to avoid race conditions
+            _username.value = null
+            _avatarUri.value = null
+            
+            // 2. Emit logout event to MainActivity
+            _uiEvent.emit(UiEvent.Logout)
+            
+            // 3. Clear local database and preferences
+            repository.clearAllDatabase()
+            preferencesManager.setAvatarUri(null)
+            preferencesManager.setFirstLaunch(true)
+            preferencesManager.setHasAcceptedQualifications(false)
+        }
     }
 
     fun openRankDialog() {
@@ -142,8 +162,12 @@ class HomeViewModel(
     val user: StateFlow<User> = repository.user
         .onEach {
             if (it == null) {
-                viewModelScope.launch {
-                    repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
+                // ONLY create a default user if we have an active session
+                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (firebaseUser != null) {
+                    viewModelScope.launch {
+                        repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
+                    }
                 }
             } else {
                 // Monitor for title unlocks
@@ -249,6 +273,9 @@ class HomeViewModel(
                     val remoteStreak = doc.getLong("currentStreak")?.toInt() ?: 0
                     val remoteLastQuestCompletedDate = doc.getString("lastQuestCompletedDate") ?: ""
                     val remotePhotoUrl = doc.getString("photoUrl")
+                    val remoteGuildId = doc.getString("guildId")
+                    val remoteGuildName = doc.getString("guildName")
+                    val remoteGuildTag = doc.getString("guildTag")
 
                     // 1. Check if local DB is empty
                     val currentUserSnapshot = repository.user.first()
@@ -260,6 +287,9 @@ class HomeViewModel(
                         }
                     }
 
+                    // 2.5 Pull workout history from cloud
+                    repository.fetchWorkoutHistoryFromCloud()
+
                     // 3. FORCE OVERWRITE STALE JSON DATA WITH LIVE ROOT FIELDS
                     val userAfterRestore = repository.user.first() ?: User()
                     repository.updateUser(userAfterRestore.copy(
@@ -269,7 +299,10 @@ class HomeViewModel(
                         streak = remoteStreak,
                         lastQuestRefreshDate = remoteLastRefresh,
                         lastQuestCompletedDate = remoteLastQuestCompletedDate,
-                        photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl
+                        photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl,
+                        guildId = remoteGuildId ?: userAfterRestore.guildId,
+                        guildName = remoteGuildName ?: userAfterRestore.guildName,
+                        guildTag = remoteGuildTag ?: userAfterRestore.guildTag
                     ))
 
                     // 4. Pull live quests if they are for today
@@ -360,6 +393,11 @@ class HomeViewModel(
                             remoteLastQuestDate != currentUser.lastQuestCompletedDate ||
                             remoteLevel != currentUser.level) {
                             
+                            // If XP increased, emit gained event for global UI popup
+                            if (remoteXp > currentUser.totalXpEarned) {
+                                _uiEvent.emit(UiEvent.XpGained(remoteXp - currentUser.totalXpEarned))
+                            }
+
                             repository.updateUser(currentUser.copy(
                                 totalXpEarned = remoteXp,
                                 streak = remoteStreak,
@@ -612,6 +650,18 @@ class HomeViewModel(
         }
     }
 
+    fun triggerXpAnimation(amount: Int) {
+        if (amount <= 0) return
+        viewModelScope.launch {
+            _floatingXpReward.value = amount
+            _uiEvent.emit(UiEvent.XpGained(amount))
+        }
+    }
+
+    fun clearFloatingXp() {
+        _floatingXpReward.value = null
+    }
+
     suspend fun exportData(): String = withContext(Dispatchers.IO) {
         try {
             val json = JSONObject()
@@ -771,17 +821,6 @@ class HomeViewModel(
         } catch (e: Exception) {
             _uiEvent.emit(UiEvent.BackupError("Export failed: ${e.message}"))
             ""
-        }
-    }
-
-    fun importData(jsonString: String, isRemoteSync: Boolean = false) {
-        viewModelScope.launch {
-            _isSyncing.value = true
-            performDataRestore(jsonString, isRemoteSync)
-            // Checks only run if NOT a silent background sync, but here we wait
-            checkPenalty()
-            checkAndRefreshQuests()
-            _isSyncing.value = false
         }
     }
 

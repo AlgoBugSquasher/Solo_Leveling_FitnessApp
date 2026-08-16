@@ -8,6 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -15,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.exork.app.data.AppDatabase
 import com.exork.app.data.FitnessRepository
 import com.exork.app.data.PreferencesManager
@@ -30,6 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.exork.app.ui.theme.ExorkTheme
 import com.exork.app.ui.theme.MonarchSlate
+import kotlinx.coroutines.launch
 
 data class SystemNotification(
     val title: String = "NOTIFICATION",
@@ -78,6 +83,8 @@ class MainActivity : ComponentActivity() {
                     modelClass.isAssignableFrom(AuthViewModel::class.java) -> AuthViewModel() as T
                     modelClass.isAssignableFrom(LeaderboardViewModel::class.java) -> LeaderboardViewModel() as T
                     modelClass.isAssignableFrom(HunterNetworkViewModel::class.java) -> HunterNetworkViewModel(repository) as T
+                    modelClass.isAssignableFrom(GuildViewModel::class.java) -> GuildViewModel(repository) as T
+                    modelClass.isAssignableFrom(AnalyticsViewModel::class.java) -> AnalyticsViewModel(repository) as T
                     else -> throw IllegalArgumentException("Unknown ViewModel class")
                 }
             }
@@ -99,7 +106,10 @@ class MainActivity : ComponentActivity() {
             
             ExorkTheme {
                 val navController = rememberNavController()
-                val homeViewModel = ViewModelProvider(this, viewModelFactory)[HomeViewModel::class.java]
+                
+                // Shared Activity-scoped HomeViewModel
+                val homeViewModel: HomeViewModel = viewModel(factory = viewModelFactory)
+                
                 val userState = homeViewModel.user.collectAsState()
 
                 // System Notification Queue
@@ -171,6 +181,29 @@ class MainActivity : ComponentActivity() {
                                     secondaryText = null,
                                     onPrimary = { notificationQueue.removeAt(0) }
                                 ))
+                            }
+                            is UiEvent.Logout -> {
+                                // 1. Sign out from Firebase
+                                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                                
+                                // 2. Sign out from Google if applicable
+                                try {
+                                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+                                    com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this@MainActivity, gso).signOut()
+                                } catch (e: Exception) {}
+
+                                // 3. Reset AuthViewModel explicitly if possible
+                                // Since it's activity-scoped, we can find it
+                                val authViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AuthViewModel::class.java]
+                                authViewModel.signOut()
+
+                                // 4. Force navigate to auth and clear ENTIRE backstack
+                                navController.navigate("auth") {
+                                    popUpTo(0) {
+                                        inclusive = true
+                                    }
+                                    launchSingleTop = true
+                                }
                             }
                             else -> {}
                         }
@@ -261,18 +294,27 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    NavHost(navController = navController, startDestination = "splash") {
+                    NavHost(
+                        navController = navController, 
+                        startDestination = "splash",
+                        enterTransition = { slideInHorizontally(animationSpec = tween(150, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(120)) },
+                        exitTransition = { slideOutHorizontally(animationSpec = tween(150, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(120)) },
+                        popEnterTransition = { slideInHorizontally(animationSpec = tween(150, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(120)) },
+                        popExitTransition = { slideOutHorizontally(animationSpec = tween(150, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(120)) }
+                    ) {
                         composable("splash") {
                             ExorkSplashScreen(
                                 onAnimationComplete = {
                                     val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                                    if (currentUser == null) {
-                                        navController.navigate("auth") {
-                                            popUpTo("splash") { inclusive = true }
-                                        }
-                                    } else {
-                                        navController.navigate("home") {
-                                            popUpTo("splash") { inclusive = true }
+                                    val destination = if (currentUser == null) "auth" else "home"
+                                    
+                                    // Use safe navigation to prevent race condition crashes
+                                    safeNav {
+                                        if (navController.currentDestination?.route == "splash") {
+                                            navController.navigate(destination) {
+                                                popUpTo("splash") { inclusive = true }
+                                                launchSingleTop = true
+                                            }
                                         }
                                     }
                                 }
@@ -291,8 +333,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("home") {
+                            val analyticsViewModel = viewModel<AnalyticsViewModel>(factory = viewModelFactory)
                             HomeScreen(
                                 viewModel = homeViewModel,
+                                analyticsViewModel = analyticsViewModel,
                                 onOpenArchives = { safeNavigate("archive_hub") },
                                 onOpenHunterArchive = { safeNavigate("archive") },
                                 onOpenAchievements = { safeNavigate("achievements") },
@@ -305,8 +349,31 @@ class MainActivity : ComponentActivity() {
                                 onOpenHunterJourney = { safeNavigate("history") },
                                 onOpenStatistics = { safeNavigate("statistics") },
                                 onOpenLeaderboard = { safeNavigate("leaderboard") },
-                                onOpenNetwork = { safeNavigate("network") }
+                                onOpenNetwork = { safeNavigate("network") },
+                                onOpenGuild = { safeNavigate("guild") }
                             )
+                        }
+                        composable("guild") {
+                            val guildViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[GuildViewModel::class.java]
+                            val coroutineScope = rememberCoroutineScope()
+                            var inspectingMember by remember { mutableStateOf<com.exork.app.model.HunterProfile?>(null) }
+                            
+                            GuildScreen(
+                                viewModel = guildViewModel,
+                                onNavigateBack = { safePop() },
+                                onNavigateToUserProfile = { memberId ->
+                                    coroutineScope.launch {
+                                        inspectingMember = repository.getHunterProfile(memberId)
+                                    }
+                                }
+                            )
+
+                            if (inspectingMember != null) {
+                                com.exork.app.ui.components.HunterProfileInspectDialog(
+                                    profile = inspectingMember!!,
+                                    onDismiss = { inspectingMember = null }
+                                )
+                            }
                         }
                         composable("leaderboard") {
                             val leaderboardViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[LeaderboardViewModel::class.java]
@@ -348,17 +415,16 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("profile_hub") {
-                            val hunterViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
                             HunterProfileScreen(
-                                viewModel = hunterViewModel,
+                                viewModel = homeViewModel,
                                 onNavigateBack = { safePop() }
                             )
                         }
                         composable("settings") {
-                            val settingsViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[HomeViewModel::class.java]
                             SettingsScreen(
-                                viewModel = settingsViewModel,
+                                viewModel = homeViewModel,
                                 onViewAbout = { safeNavigate("about") },
+                                onLogout = { homeViewModel.logout() },
                                 onNavigateBack = { safePop() }
                             )
                         }
@@ -383,6 +449,10 @@ class MainActivity : ComponentActivity() {
                             val workoutViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[WorkoutViewModel::class.java]
                             WorkoutScreen(
                                 viewModel = workoutViewModel,
+                                onWorkoutComplete = { xp ->
+                                    homeViewModel.triggerXpAnimation(xp)
+                                    safePop()
+                                },
                                 onNavigateBack = { safePop() }
                             )
                         }

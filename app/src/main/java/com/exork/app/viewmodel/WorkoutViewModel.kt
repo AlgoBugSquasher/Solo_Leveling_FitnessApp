@@ -9,25 +9,24 @@ import com.exork.app.model.ExerciseTrackingType
 import com.exork.app.model.ExerciseEntity
 import com.exork.app.model.WorkoutEntity
 import com.exork.app.util.XpCalculator
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() {
 
     val user = repository.user
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _exercises = MutableStateFlow<List<Exercise>>(emptyList())
-    val exercises = _exercises.asStateFlow()
+    private val _pendingExercises = MutableStateFlow<List<Exercise>>(emptyList())
+    val exercises = _pendingExercises.asStateFlow()
 
-    private val _eventFlow = MutableSharedFlow<WorkoutEvent>()
-    val eventFlow = _eventFlow.asSharedFlow()
+    private val _uiEvent = MutableSharedFlow<UiEvent>()
+    val uiEvent = _uiEvent.asSharedFlow()
+
+    private val _isUploading = MutableStateFlow(false)
+    val isUploading: StateFlow<Boolean> = _isUploading.asStateFlow()
 
     fun addExercise(
         name: String,
@@ -39,87 +38,93 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
         distanceKm: Double?
     ) {
         val newExercise = Exercise(name, category, trackingType, reps, sets, duration, distanceKm)
-        _exercises.value = _exercises.value + newExercise
+        _pendingExercises.value = _pendingExercises.value + newExercise
     }
 
     fun removeExercise(exercise: Exercise) {
-        _exercises.value = _exercises.value - exercise
+        _pendingExercises.value = _pendingExercises.value - exercise
     }
 
     fun updateExercise(oldExercise: Exercise, newExercise: Exercise) {
-        _exercises.value = _exercises.value.map { if (it == oldExercise) newExercise else it }
+        _pendingExercises.value = _pendingExercises.value.map { if (it == oldExercise) newExercise else it }
     }
 
-    fun completeWorkout() {
+    fun uploadProgress(onComplete: (Int) -> Unit) {
+        if (_isUploading.value) return // Prevent multi-click spam
+        val currentPending = _pendingExercises.value
+        if (currentPending.isEmpty()) return
+
         viewModelScope.launch {
-            val currentUser = repository.user.first() ?: return@launch
-            val workoutExercises = _exercises.value
-            if (workoutExercises.isEmpty()) return@launch
+            _isUploading.value = true
+            try {
+                val currentUser = repository.user.first() ?: return@launch
 
-            // 1. Calculate raw XP gained
-            val rawXpGained = XpCalculator.calculateWorkoutXp(workoutExercises, currentUser.streak)
-
-            // 2. Synchronize with Daily Cap (+250 XP)
-            val maxCustomXp = 250
-            val currentCustomXpToday = currentUser.customXpEarnedToday
-            val remainingCap = (maxCustomXp - currentCustomXpToday).coerceAtLeast(0)
-            val actualXpToAward = rawXpGained.coerceAtMost(remainingCap)
-
-            // 3. Track total stats for this workout
-            var addedPushups = 0
-            var addedPullups = 0
-            var addedPlankTime = 0
-            var addedDistance = 0.0
-
-            workoutExercises.forEach { ex ->
-                when (ex.category) {
-                    ExerciseCategory.PUSHUPS -> addedPushups += (ex.reps ?: 0) * ex.sets
-                    ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
-                    ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
-                    ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
-                    ExerciseCategory.OTHER -> {}
+                // 1. Calculate XP from pending exercises
+                val calculatedXp = XpCalculator.calculateWorkoutXp(currentPending, currentUser.streak)
+                
+                // 2. Insert Workout & Exercises into Room and update stats
+                val workout = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = calculatedXp)
+                val exerciseEntities = currentPending.map { 
+                    ExerciseEntity(
+                        workoutId = 0,
+                        name = it.name,
+                        category = it.category,
+                        trackingType = it.trackingType,
+                        reps = it.reps,
+                        sets = it.sets,
+                        duration = it.duration,
+                        distanceKm = it.distanceKm
+                    )
                 }
-            }
+                
+                // Track total stats for this workout
+                var addedPushups = 0
+                var addedPullups = 0
+                var addedPlankTime = 0
+                var addedDistance = 0.0
 
-            // 4. Record Progress via Repository
-            // We pass the raw XP, the repository will handle the capping internally again for safety,
-            // but we ensure consistency by calculating actualXpToAward here for the UI.
-            repository.recordProgress(
-                pushups = addedPushups,
-                pullups = addedPullups,
-                plankSeconds = addedPlankTime,
-                distanceKm = addedDistance,
-                xpGained = rawXpGained,
-                isWorkout = true
-            )
+                currentPending.forEach { ex ->
+                    when (ex.category) {
+                        ExerciseCategory.PUSHUPS -> addedPushups += (ex.reps ?: 0) * ex.sets
+                        ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
+                        ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
+                        ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
+                        ExerciseCategory.OTHER -> {}
+                    }
+                }
 
-            // 5. Save Workout Entity for history
-            val workoutEntity = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = actualXpToAward)
-            val exerciseEntities = workoutExercises.map { 
-                ExerciseEntity(
-                    workoutId = 0,
-                    name = it.name,
-                    category = it.category,
-                    trackingType = it.trackingType,
-                    reps = it.reps,
-                    sets = it.sets,
-                    duration = it.duration,
-                    distanceKm = it.distanceKm
+                repository.insertWorkout(workout, exerciseEntities)
+                repository.recordProgress(
+                    pushups = addedPushups,
+                    pullups = addedPullups,
+                    plankSeconds = addedPlankTime,
+                    distanceKm = addedDistance,
+                    xpGained = calculatedXp,
+                    isWorkout = true
                 )
+
+                // 3. Emit XP Gained UI Event for Animation & Sound
+                _uiEvent.emit(UiEvent.XpGained(calculatedXp))
+
+                // 4. CRITICAL: Clear Pending Data
+                _pendingExercises.value = emptyList()
+
+                // 5. Trigger sync & Navigate Back
+                val updatedUser = repository.user.first()
+                if (updatedUser != null) {
+                    repository.syncToFirestore(updatedUser)
+                }
+                
+                withContext(Dispatchers.Main) {
+                    // Pass the full calculated XP for the UI animation feedback, 
+                    // even if the repository correctly caps the actual balance update.
+                    onComplete(calculatedXp)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("WORKOUT_LOG", "Failed to upload progress", e)
+            } finally {
+                _isUploading.value = false
             }
-            repository.insertWorkout(workoutEntity, exerciseEntities)
-
-            // Emit the actual awarded XP for the celebratory popup
-            _eventFlow.emit(WorkoutEvent.WorkoutCompleted(actualXpToAward))
-            
-            // Reset exercises
-            _exercises.value = emptyList()
         }
-    }
-
-    sealed class WorkoutEvent {
-        data class WorkoutCompleted(val xpGained: Int) : WorkoutEvent()
-        data class LevelUp(val newLevel: Int) : WorkoutEvent()
-        data class NewPersonalRecord(val recordName: String, val oldValue: Int, val newValue: Int) : WorkoutEvent()
     }
 }

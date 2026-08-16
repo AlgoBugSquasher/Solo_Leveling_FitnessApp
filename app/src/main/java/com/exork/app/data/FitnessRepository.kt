@@ -10,14 +10,18 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -397,6 +401,24 @@ class FitnessRepository(
                 
                 db.collection("users").document(firebaseUser.uid).update(updateMap).await()
                 
+                // GUILD XP SYNC
+                if (updatedUser.guildId != null) {
+                    val guildRef = db.collection("guilds").document(updatedUser.guildId)
+                    val memberRef = guildRef.collection("members").document(firebaseUser.uid)
+                    
+                    db.runTransaction { transaction ->
+                        val guildSnap = transaction.get(guildRef)
+                        val oldTotalXp = guildSnap.getLong("totalGuildXp") ?: 0L
+                        
+                        transaction.update(memberRef, mapOf(
+                            "totalXp" to updatedUser.totalXpEarned,
+                            "level" to updatedUser.level,
+                            "rank" to updatedUser.rank
+                        ))
+                        transaction.update(guildRef, "totalGuildXp", oldTotalXp + effectiveXpGained)
+                    }
+                }
+                
                 android.util.Log.d("EXORK_QUEST", "Quest saved. Total XP is now: ${updatedUser.totalXpEarned} on date: ${updatedUser.lastQuestCompletedDate}")
             } catch (e: Exception) {
                 syncToFirestore(updatedUser) // Fallback
@@ -492,6 +514,10 @@ class FitnessRepository(
             "activeTitle" to user.activeTitle,
             "soundEnabled" to user.soundEnabled,
             "photoUrl" to user.photoUrl,
+            "guildId" to user.guildId,
+            "currentGuildId" to user.guildId,
+            "guildName" to user.guildName,
+            "guildTag" to user.guildTag,
             "dailyQuests" to questMap,
             "plannedExercises" to plannedMap,
             "lastSync" to System.currentTimeMillis()
@@ -538,6 +564,14 @@ class FitnessRepository(
             val currentUser = user.first()
             if (currentUser != null) {
                 updateUser(currentUser.copy(photoUrl = base64Image))
+                
+                // 3. Update Guild Member Photo
+                if (currentUser.guildId != null) {
+                    FirebaseFirestore.getInstance()
+                        .collection("guilds").document(currentUser.guildId)
+                        .collection("members").document(firebaseUser.uid)
+                        .update("photoUrl", base64Image)
+                }
             }
 
             base64Image
@@ -736,6 +770,112 @@ class FitnessRepository(
 
     suspend fun insertWorkout(workout: WorkoutEntity, exercises: List<ExerciseEntity>) {
         workoutDao.insertWorkoutWithExercises(workout, exercises)
+        
+        // Firestore Sync (Atomic Write)
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(workout.date))
+        syncWorkoutToCloud(
+            workoutId = workout.remoteId,
+            dateTimestamp = workout.date,
+            dateString = dateStr,
+            xpGained = workout.totalXpGained,
+            exercises = exercises
+        )
+    }
+
+    suspend fun syncWorkoutToCloud(
+        workoutId: String,
+        dateTimestamp: Long,
+        dateString: String,
+        xpGained: Int,
+        exercises: List<ExerciseEntity>
+    ) = withContext(Dispatchers.IO) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return@withContext
+        val db = FirebaseFirestore.getInstance()
+
+        val categoryBreakdown = mutableMapOf<String, Int>()
+        exercises.forEach { ex ->
+            val cat = ex.category.name.uppercase()
+            val volume = if (ex.trackingType == ExerciseTrackingType.REPS) (ex.reps ?: 0) * ex.sets else (ex.duration ?: 0) * ex.sets
+            categoryBreakdown[cat] = (categoryBreakdown[cat] ?: 0) + volume
+        }
+
+        val workoutData = hashMapOf(
+            "workoutId" to workoutId,
+            "timestamp" to dateTimestamp,
+            "dateString" to dateString,
+            "xpGained" to xpGained,
+            "categoryBreakdown" to categoryBreakdown,
+            "exercises" to exercises.map {
+                hashMapOf(
+                    "name" to it.name,
+                    "category" to it.category.name,
+                    "sets" to it.sets,
+                    "reps" to it.reps,
+                    "duration" to it.duration,
+                    "distanceKm" to it.distanceKm,
+                    "trackingType" to it.trackingType.name
+                )
+            }
+        )
+
+        try {
+            db.collection("users")
+                .document(firebaseUser.uid)
+                .collection("workout_history")
+                .document(workoutId)
+                .set(workoutData, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+        } catch (e: Exception) {
+            android.util.Log.e("FIRESTORE_SYNC", "Failed to sync workout to cloud", e)
+        }
+    }
+
+    suspend fun fetchWorkoutHistoryFromCloud() {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+        val db = FirebaseFirestore.getInstance()
+        try {
+            val snapshot = db.collection("users")
+                .document(firebaseUser.uid)
+                .collection("workout_history")
+                .get()
+                .await()
+            
+            val remoteWorkouts = snapshot.documents.mapNotNull { doc ->
+                val rId = doc.getString("workoutId") ?: doc.id
+                val timestamp = doc.getLong("timestamp") ?: return@mapNotNull null
+                val xpGained = doc.getLong("xpGained")?.toInt() ?: 0
+                
+                val workout = WorkoutEntity(remoteId = rId, date = timestamp, totalXpGained = xpGained)
+                val exercisesRaw = doc.get("exercises") as? List<Map<String, Any>> ?: emptyList()
+                
+                val exercises = exercisesRaw.map { e ->
+                    ExerciseEntity(
+                        workoutId = 0, // Will be set by DAO
+                        name = e["name"] as? String ?: "Exercise",
+                        category = ExerciseCategory.valueOf(e["category"] as? String ?: "OTHER"),
+                        trackingType = ExerciseTrackingType.valueOf(e["trackingType"] as? String ?: "REPS"),
+                        reps = (e["reps"] as? Long)?.toInt(),
+                        sets = (e["sets"] as? Long)?.toInt() ?: 1,
+                        duration = (e["duration"] as? Long)?.toInt(),
+                        distanceKm = e["distanceKm"] as? Double
+                    )
+                }
+                workout to exercises
+            }
+            
+            // Batch insert into local Room DB (Room handles duplicates if configured, but here we just append or use a strategy)
+            // For MVP, we'll only insert if the local DB for that timestamp is empty
+            database.withTransaction {
+                remoteWorkouts.forEach { (workout, exercises) ->
+                    val existing = workoutDao.getWorkoutByRemoteId(workout.remoteId)
+                    if (existing == null) {
+                        workoutDao.insertWorkoutWithExercises(workout, exercises)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FIRESTORE_SYNC", "Failed to fetch workout history", e)
+        }
     }
 
     suspend fun updateUser(user: User) {
@@ -809,6 +949,16 @@ class FitnessRepository(
         return baseStatsMet && dependenciesMet
     }
 
+    suspend fun getHunterProfile(userId: String): HunterProfile? {
+        val db = FirebaseFirestore.getInstance()
+        return try {
+            val doc = db.collection("users").document(userId).get().await()
+            if (doc.exists()) mapDocumentToHunterProfile(doc) else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun calculateLevelFromXp(totalXp: Long): Int {
         var remainingXp = totalXp
         var level = 1
@@ -824,7 +974,7 @@ class FitnessRepository(
         return level
     }
 
-    private fun mapDocumentToHunterProfile(doc: com.google.firebase.firestore.DocumentSnapshot): HunterProfile {
+    fun mapDocumentToHunterProfile(doc: com.google.firebase.firestore.DocumentSnapshot): HunterProfile {
         val rawXp = doc.getLong("totalXp") ?: doc.getLong("xp") ?: 0L
         val calculatedLevel = calculateLevelFromXp(rawXp)
         val username = doc.getString("username") ?: doc.getString("displayName") ?: "Hunter"
@@ -1114,4 +1264,513 @@ class FitnessRepository(
             profileListener?.remove()
         }
     }
+
+    suspend fun createGuild(name: String, tag: String, badgeIcon: String): Result<String> {
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser ?: return Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+        val cleanName = name.trim()
+        val cleanTag = tag.trim().uppercase()
+
+        return try {
+            // 1. Check Unique Name (case-insensitive)
+            val nameQuery = db.collection("guilds")
+                .whereEqualTo("nameLower", cleanName.lowercase())
+                .limit(1)
+                .get()
+                .await()
+            if (!nameQuery.isEmpty) {
+                return Result.failure(Exception("Guild name '$cleanName' is already taken!"))
+            }
+
+            // 2. Check Unique Tag
+            val tagQuery = db.collection("guilds")
+                .whereEqualTo("tag", cleanTag)
+                .limit(1)
+                .get()
+                .await()
+            if (!tagQuery.isEmpty) {
+                return Result.failure(Exception("Guild tag '[$cleanTag]' is already in use!"))
+            }
+
+            // 3. Create Guild Document
+            val guildId = java.util.UUID.randomUUID().toString()
+            
+            // Fetch username from Firestore since it's not in local User entity reliably for display
+            val userDoc = db.collection("users").document(currentUser.uid).get().await()
+            val username = userDoc.getString("username") ?: currentUser.displayName ?: "Hunter"
+            val localUserSnapshot = userDao.getUserDirect()
+
+            val guildDoc = mapOf(
+                "id" to guildId,
+                "name" to cleanName,
+                "nameLower" to cleanName.lowercase(),
+                "tag" to cleanTag,
+                "masterId" to currentUser.uid,
+                "masterName" to username,
+                "badgeIcon" to badgeIcon,
+                "memberCount" to 1,
+                "memberIds" to listOf(currentUser.uid),
+                "maxMembers" to 10,
+                "totalGuildXp" to (localUserSnapshot?.totalXpEarned?.toLong() ?: 0L),
+                "notice" to "Welcome to $cleanName!",
+                "createdAt" to System.currentTimeMillis()
+            )
+
+            db.collection("guilds").document(guildId).set(guildDoc).await()
+
+            // Add creator as MASTER
+            val memberDoc = mapOf(
+                "userId" to currentUser.uid,
+                "username" to username,
+                "role" to "MASTER",
+                "level" to (localUserSnapshot?.level ?: 1),
+                "rank" to (localUserSnapshot?.rank ?: "E-Rank Hunter"),
+                "totalXp" to (localUserSnapshot?.totalXpEarned ?: 0),
+                "weeklyXp" to 0,
+                "photoUrl" to (localUserSnapshot?.photoUrl ?: "")
+            )
+            db.collection("guilds").document(guildId).collection("members").document(currentUser.uid).set(memberDoc).await()
+
+            // Update User Profile with Guild details
+            db.collection("users").document(currentUser.uid).update(
+                mapOf("guildId" to guildId, "guildName" to cleanName, "guildTag" to cleanTag)
+            ).await()
+
+            if (localUserSnapshot != null) {
+                updateUser(localUserSnapshot.copy(
+                    guildId = guildId,
+                    guildName = cleanName,
+                    guildTag = cleanTag
+                ))
+            }
+
+            Result.success(guildId)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun joinGuild(guildId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val auth = FirebaseAuth.getInstance()
+        val currentUserId = auth.currentUser?.uid ?: return@withContext Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+        val localUser = user.first() ?: return@withContext Result.failure(Exception("Local profile not found"))
+        
+        val userDoc = try { db.collection("users").document(currentUserId).get().await() } catch(e: Exception) { null }
+        val username = userDoc?.getString("username") ?: auth.currentUser?.displayName ?: "Hunter"
+        val photoUrl = localUser.photoUrl ?: ""
+
+        val guildRef = db.collection("guilds").document(guildId)
+        val userRef = db.collection("users").document(currentUserId)
+
+        try {
+            val guildSnap = guildRef.get().await()
+            if (!guildSnap.exists()) {
+                return@withContext Result.failure(Exception("Guild does not exist."))
+            }
+
+            val masterId = guildSnap.getString("masterId") ?: ""
+            val existingMemberIds = (guildSnap.get("memberIds") as? List<String>) ?: listOfNotNull(masterId.takeIf { it.isNotEmpty() })
+            val maxMembers = guildSnap.getLong("maxMembers") ?: 10L
+
+            if (existingMemberIds.size >= maxMembers && !existingMemberIds.contains(currentUserId)) {
+                return@withContext Result.failure(Exception("Guild is full (${existingMemberIds.size}/$maxMembers)."))
+            }
+
+            // 1. Atomically add user ID to Guild Document
+            guildRef.update(
+                "memberIds", FieldValue.arrayUnion(currentUserId),
+                "memberCount", (existingMemberIds.filter { it != currentUserId }.size + 1)
+            ).await()
+
+            // 2. Add/Update Member in Guild subcollection
+            val memberData = hashMapOf(
+                "userId" to currentUserId,
+                "username" to username,
+                "photoUrl" to photoUrl,
+                "rank" to localUser.rank,
+                "level" to localUser.level,
+                "totalXp" to localUser.totalXpEarned,
+                "role" to if (currentUserId == masterId) "MASTER" else "MEMBER",
+                "joinedAt" to System.currentTimeMillis()
+            )
+            guildRef.collection("members").document(currentUserId).set(memberData, SetOptions.merge()).await()
+
+            // 3. Update User's Profile with Guild Reference
+            val cleanName = guildSnap.getString("name") ?: ""
+            val cleanTag = guildSnap.getString("tag") ?: ""
+            
+            userRef.update(
+                mapOf(
+                    "currentGuildId" to guildId,
+                    "guildId" to guildId,
+                    "guildName" to cleanName,
+                    "guildTag" to cleanTag
+                )
+            ).await()
+
+            // Update local state
+            updateUser(localUser.copy(
+                guildId = guildId,
+                guildName = cleanName,
+                guildTag = cleanTag
+            ))
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("GUILD_JOIN_FAIL", "Failed to join guild", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun leaveGuild(guildId: String): Boolean {
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return false
+        val db = FirebaseFirestore.getInstance()
+        val currentUser = user.first() ?: return false
+
+        return try {
+            db.runTransaction { transaction ->
+                val guildRef = db.collection("guilds").document(guildId)
+                val guildSnap = transaction.get(guildRef)
+                
+                val currentMembers = guildSnap.get("memberIds") as? List<String> ?: emptyList()
+                val currentCount = guildSnap.getLong("memberCount") ?: currentMembers.size.toLong()
+                val masterId = guildSnap.getString("masterId")
+                val currentTotalXp = guildSnap.getLong("totalGuildXp") ?: 0L
+
+                if (masterId == currentUserId) throw Exception("Master cannot leave guild. Disband it instead.")
+
+                val memberRef = guildRef.collection("members").document(currentUserId)
+                val userRef = db.collection("users").document(currentUserId)
+
+                val updatedMembers = currentMembers.filter { it != currentUserId }
+
+                transaction.delete(memberRef)
+                transaction.update(guildRef, mapOf(
+                    "memberIds" to updatedMembers,
+                    "memberCount" to (currentCount - 1).coerceAtLeast(1),
+                    "totalGuildXp" to (currentTotalXp - currentUser.totalXpEarned).coerceAtLeast(0)
+                ))
+                transaction.update(userRef, mapOf("guildId" to null, "guildName" to null, "guildTag" to null))
+            }.await()
+            
+            updateUser(currentUser.copy(guildId = null, guildName = null, guildTag = null))
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("GuildSync", "Failed to leave guild", e)
+            false
+        }
+    }
+
+    suspend fun disbandGuild(guildId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val currentUser = FirebaseAuth.getInstance().currentUser ?: return@withContext Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+
+        try {
+            val guildDoc = db.collection("guilds").document(guildId).get().await()
+            if (guildDoc.getString("masterId") != currentUser.uid) {
+                return@withContext Result.failure(Exception("Only the Guild Master can disband this guild."))
+            }
+
+            // 1. Fetch all members and remove their guild references
+            val members = db.collection("guilds").document(guildId).collection("members").get().await()
+            val batch = db.batch()
+            for (member in members.documents) {
+                val userRef = db.collection("users").document(member.id)
+                batch.update(userRef, mapOf("guildId" to null, "guildName" to null, "guildTag" to null))
+            }
+
+            // 2. Delete all member sub-collection docs and guild doc
+            for (member in members.documents) {
+                batch.delete(member.reference)
+            }
+            batch.delete(db.collection("guilds").document(guildId))
+            batch.commit().await()
+
+            // 3. Update local Room DB
+            val localUser = userDao.getUserDirect()
+            if (localUser != null) {
+                updateUser(localUser.copy(guildId = null, guildName = null, guildTag = null))
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateGuildNotice(guildId: String, newNotice: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val currentUser = FirebaseAuth.getInstance().currentUser ?: return@withContext Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+
+        try {
+            val guildDoc = db.collection("guilds").document(guildId).get().await()
+            if (guildDoc.getString("masterId") != currentUser.uid) {
+                return@withContext Result.failure(Exception("Only the Guild Master can edit the notice."))
+            }
+
+            db.collection("guilds").document(guildId).update("notice", newNotice.trim()).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun kickMember(guildId: String, memberId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val currentUser = FirebaseAuth.getInstance().currentUser ?: return@withContext Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+
+        try {
+            val guildRef = db.collection("guilds").document(guildId)
+            val guildDoc = guildRef.get().await()
+            if (guildDoc.getString("masterId") != currentUser.uid) {
+                return@withContext Result.failure(Exception("Only the Guild Master can kick members."))
+            }
+
+            if (memberId == currentUser.uid) {
+                return@withContext Result.failure(Exception("You cannot kick yourself."))
+            }
+
+            db.runTransaction { transaction ->
+                val memberRef = guildRef.collection("members").document(memberId)
+                val userRef = db.collection("users").document(memberId)
+                val guildSnap = transaction.get(guildRef)
+                
+                val currentMembers = guildSnap.get("memberIds") as? List<String> ?: emptyList()
+                val currentCount = guildSnap.getLong("memberCount") ?: currentMembers.size.toLong()
+
+                val updatedMembers = currentMembers.filter { it != memberId }
+
+                transaction.delete(memberRef)
+                transaction.update(guildRef, mapOf(
+                    "memberIds" to updatedMembers,
+                    "memberCount" to (currentCount - 1).coerceAtLeast(1)
+                ))
+                transaction.update(userRef, mapOf(
+                    "guildId" to null,
+                    "currentGuildId" to null,
+                    "guildName" to null,
+                    "guildTag" to null
+                ))
+            }.await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun getGuildFlow(guildId: String): Flow<Guild?> = callbackFlow {
+        val db = FirebaseFirestore.getInstance()
+        val listener = db.collection("guilds").document(guildId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                
+                val memberIds = snapshot?.get("memberIds") as? List<String> ?: emptyList()
+                val guild = snapshot?.toObject(Guild::class.java)?.copy(
+                    memberCount = memberIds.size,
+                    memberIds = memberIds
+                )
+                
+                // Aggregation trigger: Ensure totalGuildXp is always accurate by summing live user docs
+                if (guild != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val membersSnap = db.collection("guilds").document(guildId).collection("members").get().await()
+                            val userTasks = membersSnap.documents.map { db.collection("users").document(it.id).get() }
+                            val totalXpSum = userTasks.sumOf { it.await().getLong("totalXp") ?: it.await().getLong("xp") ?: 0L }
+                            
+                            if (totalXpSum != guild.totalGuildXp) {
+                                db.collection("guilds").document(guildId).update("totalGuildXp", totalXpSum)
+                            }
+                        } catch (ex: Exception) {}
+                    }
+                }
+                
+                trySend(guild)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun getGuildMembersFlow(guildId: String): Flow<List<GuildMember>> = callbackFlow {
+        val db = FirebaseFirestore.getInstance()
+        val listener = db.collection("guilds").document(guildId).collection("members")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                val memberDocs = snapshot.documents
+                if (memberDocs.isEmpty()) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                // Fetch live user documents for all member IDs in parallel
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val userTasks = memberDocs.map { mDoc ->
+                            val userId = mDoc.id
+                            val role = mDoc.getString("role") ?: "MEMBER"
+                            db.collection("users").document(userId).get() to role
+                        }
+
+                        var totalGuildXpSum = 0L
+                        val liveMembers = userTasks.map { (task, role) ->
+                            val uDoc = task.await()
+                            val xp = uDoc.getLong("totalXp")?.toInt() 
+                                ?: uDoc.getLong("xp")?.toInt() 
+                                ?: 0
+                            totalGuildXpSum += xp
+
+                            GuildMember(
+                                userId = uDoc.id,
+                                username = uDoc.getString("username") ?: uDoc.getString("displayName") ?: "Hunter",
+                                rank = uDoc.getString("hunterRank") ?: "E-Rank Hunter",
+                                level = uDoc.getLong("hunterLevel")?.toInt() ?: 1,
+                                role = role,
+                                totalXp = xp,
+                                weeklyXp = xp,
+                                photoUrl = uDoc.getString("photoUrl") ?: ""
+                            )
+                        }
+
+                        // Update guild total XP atomically in Firestore
+                        db.collection("guilds").document(guildId).update("totalGuildXp", totalGuildXpSum)
+
+                        trySend(liveMembers)
+                    } catch (e: Exception) {
+                        android.util.Log.e("GUILD_SYNC", "Error fetching live guild member profiles", e)
+                    }
+                }
+            }
+
+        awaitClose { listener.remove() }
+    }
+
+    fun getPublicGuilds(): Flow<List<Guild>> = callbackFlow {
+        val db = FirebaseFirestore.getInstance()
+        val listener = db.collection("guilds")
+            .orderBy("memberCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(20)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val guilds = snapshot?.documents?.mapNotNull { doc ->
+                    val mIds = doc.get("memberIds") as? List<String> ?: emptyList()
+                    doc.toObject(Guild::class.java)?.copy(
+                        id = doc.id,
+                        memberCount = mIds.size,
+                        memberIds = mIds
+                    )
+                } ?: emptyList()
+                trySend(guilds)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun getDiscoverGuilds(): List<Guild> {
+        val db = FirebaseFirestore.getInstance()
+        return try {
+            val snapshot = db.collection("guilds")
+                .orderBy("memberCount", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(20)
+                .get()
+                .await()
+            snapshot.documents.mapNotNull { doc ->
+                val mIds = doc.get("memberIds") as? List<String> ?: emptyList()
+                doc.toObject(Guild::class.java)?.copy(
+                    memberCount = mIds.size,
+                    memberIds = mIds
+                )
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("GUILD_DISCOVER", "Failed to fetch guilds", e)
+            emptyList()
+        }
+    }
+
+    suspend fun searchGuilds(query: String): List<Guild> {
+        val db = FirebaseFirestore.getInstance()
+        return try {
+            val snapshot = db.collection("guilds")
+                .whereGreaterThanOrEqualTo("name", query)
+                .whereLessThanOrEqualTo("name", query + "\uf8ff")
+                .limit(20)
+                .get()
+                .await()
+            snapshot.documents.mapNotNull { doc ->
+                val mIds = doc.get("memberIds") as? List<String> ?: emptyList()
+                doc.toObject(Guild::class.java)?.copy(
+                    id = doc.id,
+                    memberCount = mIds.size,
+                    memberIds = mIds
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getMonthlyWorkoutDays(yearMonth: String): Flow<Set<String>> = allWorkouts.map { workouts ->
+        val sdf = SimpleDateFormat("yyyy-MM", Locale.US)
+        val daySdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        workouts.filter { 
+            sdf.format(Date(it.workout.date)) == yearMonth 
+        }.map { 
+            daySdf.format(Date(it.workout.date)) 
+        }.toSet()
+    }
+
+    fun getTodayCategoryDistribution(): Flow<Map<String, Float>> = allWorkouts.map { workouts ->
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val daySdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        
+        val distribution = mutableMapOf<String, Float>()
+        var totalVolume = 0f
+        
+        workouts.filter { daySdf.format(Date(it.workout.date)) == todayStr }
+            .forEach { w ->
+                w.exercises.forEach { ex ->
+                    val volume = if (ex.trackingType == ExerciseTrackingType.REPS) {
+                        ((ex.reps ?: 0) * ex.sets).toFloat()
+                    } else {
+                        ((ex.duration ?: 0) * ex.sets).toFloat()
+                    }
+                    distribution[ex.category.name] = (distribution[ex.category.name] ?: 0f) + volume
+                    totalVolume += volume
+                }
+            }
+        
+        if (totalVolume > 0) {
+            val normalized = mutableMapOf<String, Float>()
+            distribution.forEach { (cat, vol) ->
+                normalized[cat] = vol / totalVolume
+            }
+            normalized
+        } else {
+            emptyMap()
+        }
+    }
+
+    fun getRolling7DayPerformance(): Flow<List<DayPerformance>> = allWorkouts.map { workouts ->
+        val result = mutableListOf<DayPerformance>()
+        val daySdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val labelSdf = SimpleDateFormat("EEE", Locale.US)
+
+        for (i in 6 downTo 0) {
+            val d = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
+            val dateStr = daySdf.format(d.time)
+            val xp = workouts.filter { daySdf.format(Date(it.workout.date)) == dateStr }
+                .sumOf { it.workout.totalXpGained }
+            result.add(DayPerformance(labelSdf.format(d.time), xp))
+        }
+        result
+    }
 }
+
+data class DayPerformance(val label: String, val xp: Int)

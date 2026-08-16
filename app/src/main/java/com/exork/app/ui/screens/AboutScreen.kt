@@ -70,7 +70,7 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
         ) {
             AnimatedVisibility(
                 visible = isVisible,
-                enter = fadeIn(tween(1000)) + scaleIn(tween(1000, easing = androidx.compose.animation.core.FastOutSlowInEasing), initialScale = 0.9f)
+                enter = fadeIn(tween(500)) + scaleIn(tween(500, easing = androidx.compose.animation.core.FastOutSlowInEasing), initialScale = 0.9f)
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

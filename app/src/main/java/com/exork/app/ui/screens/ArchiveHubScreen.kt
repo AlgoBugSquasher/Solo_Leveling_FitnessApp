@@ -174,7 +174,7 @@ fun HunterCollectionCard(state: ArchiveProgressState) {
     LaunchedEffect(state.completionPercentage) {
         progressAnimation.animateTo(
             targetValue = state.completionPercentage / 100f,
-            animationSpec = tween(1200, easing = FastOutSlowInEasing)
+            animationSpec = tween(600, easing = FastOutSlowInEasing)
         )
     }
 

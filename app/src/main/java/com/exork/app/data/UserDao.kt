@@ -9,6 +9,9 @@ interface UserDao {
     @Query("SELECT * FROM user_table WHERE id = 0")
     fun getUser(): Flow<User?>
 
+    @Query("SELECT * FROM user_table WHERE id = 0")
+    suspend fun getUserDirect(): User?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User)
 

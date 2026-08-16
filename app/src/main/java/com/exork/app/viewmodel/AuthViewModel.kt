@@ -31,6 +31,20 @@ class AuthViewModel : ViewModel() {
     private val _user = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val user: StateFlow<FirebaseUser?> = _user.asStateFlow()
 
+    private var authListener: FirebaseAuth.AuthStateListener? = null
+
+    init {
+        authListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            _user.value = firebaseAuth.currentUser
+        }
+        auth.addAuthStateListener(authListener!!)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        authListener?.let { auth.removeAuthStateListener(it) }
+    }
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 

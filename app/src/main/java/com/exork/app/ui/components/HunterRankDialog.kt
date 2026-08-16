@@ -164,7 +164,7 @@ fun HunterRankDialog(
                             val glowAlpha by infiniteTransition.animateFloat(
                                 initialValue = 0.3f,
                                 targetValue = 0.7f,
-                                animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
+                                animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
                                 label = "glow"
                             )
 
@@ -208,7 +208,7 @@ fun ObsidianCrystalHexagon(rank: String) {
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
         targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "pulse"
     )
     val glowColor = Color(0xFF00BFFF)
@@ -226,7 +226,7 @@ fun ObsidianCrystalHexagon(rank: String) {
         val rotation by infiniteTransition.animateFloat(
             initialValue = 0f,
             targetValue = 360f,
-            animationSpec = infiniteRepeatable(tween(10000, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(tween(5000, easing = LinearEasing)),
             label = "rotation"
         )
         Box(
@@ -352,7 +352,7 @@ fun LightningEffect(modifier: Modifier = Modifier, count: Int = 2, color: Color 
     val frame by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(150, easing = LinearEasing)),
+        animationSpec = infiniteRepeatable(tween(75, easing = LinearEasing)),
         label = "frame"
     )
 
@@ -390,11 +390,11 @@ fun SystemGlitchText(text: String, style: TextStyle) {
         typeConverter = Offset.VectorConverter,
         animationSpec = infiniteRepeatable(
             animation = keyframes {
-                durationMillis = 2000
+                durationMillis = 1000
                 Offset(0f, 0f) at 0
-                Offset(1.5f, -0.5f) at 1800
-                Offset(-1.5f, 0.5f) at 1850
-                Offset(0f, 0f) at 1900
+                Offset(1.5f, -0.5f) at 900
+                Offset(-1.5f, 0.5f) at 925
+                Offset(0f, 0f) at 950
             }
         ),
         label = "offset"
@@ -424,7 +424,7 @@ fun XPExplosionAnimation(onFinished: () -> Unit) {
     val animatable = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        animatable.animateTo(1f, tween(1200, easing = LinearOutSlowInEasing))
+        animatable.animateTo(1f, tween(600, easing = LinearOutSlowInEasing))
         onFinished()
     }
 

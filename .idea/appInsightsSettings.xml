@@ -9,10 +9,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.exork.app" />
+                  <option name="mobileSdkAppId" value="1:669660018714:android:75290ff65e0e62df3679a3" />
+                  <option name="projectId" value="exork-c9222" />
+                  <option name="projectNumber" value="669660018714" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

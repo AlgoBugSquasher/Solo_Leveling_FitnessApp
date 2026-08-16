@@ -39,7 +39,10 @@ data class User(
     val maxXpSingleWorkout: Int = 0,
     val customXpEarnedToday: Int = 0,
     val lastQuestCompletedDate: String = "",
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    val guildId: String? = null,
+    val guildName: String? = null,
+    val guildTag: String? = null
 ) {
     fun xpToNextLevel(): Int = XpCalculator.calculateRequiredXP(level)
 

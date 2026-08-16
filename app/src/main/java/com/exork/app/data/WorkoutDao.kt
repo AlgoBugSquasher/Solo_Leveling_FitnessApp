@@ -29,6 +29,12 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_table ORDER BY date DESC")
     fun getAllWorkouts(): Flow<List<WorkoutWithExercises>>
 
+    @Query("SELECT * FROM workout_table WHERE date = :timestamp LIMIT 1")
+    suspend fun getWorkoutByTimestamp(timestamp: Long): WorkoutEntity?
+
+    @Query("SELECT * FROM workout_table WHERE remoteId = :remoteId LIMIT 1")
+    suspend fun getWorkoutByRemoteId(remoteId: String): WorkoutEntity?
+
     @Query("DELETE FROM workout_table")
     suspend fun deleteAllWorkouts()
 

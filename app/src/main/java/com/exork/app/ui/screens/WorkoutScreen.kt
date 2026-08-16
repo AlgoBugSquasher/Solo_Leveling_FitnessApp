@@ -1,6 +1,5 @@
 package com.exork.app.ui.screens
 
-import android.view.animation.OvershootInterpolator
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -50,25 +49,22 @@ import kotlinx.coroutines.delay
 @Composable
 fun WorkoutScreen(
     viewModel: WorkoutViewModel, 
+    onWorkoutComplete: (Int) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val exercises by viewModel.exercises.collectAsState()
     val user by viewModel.user.collectAsState()
+    val isUploading by viewModel.isUploading.collectAsState()
     val context = LocalContext.current
     val soundManager = remember { SoundManager.getInstance(context) }
 
-    var showXpGained by remember { mutableStateOf<Int?>(null) }
     var timerExercise by remember { mutableStateOf<Exercise?>(null) }
 
     LaunchedEffect(Unit) {
-        viewModel.eventFlow.collect { event ->
+        viewModel.uiEvent.collect { event ->
             when (event) {
-                is WorkoutViewModel.WorkoutEvent.WorkoutCompleted -> {
-                    showXpGained = event.xpGained
+                is com.exork.app.viewmodel.UiEvent.XpGained -> {
                     soundManager.playQuestComplete()
-                    delay(2500)
-                    showXpGained = null
-                    onNavigateBack()
                 }
                 else -> {}
             }
@@ -169,53 +165,15 @@ fun WorkoutScreen(
                     )
 
                     ExorkChromeButton(
-                        text = "UPLOAD PROGRESS",
+                        text = if (isUploading) "UPLOADING..." else "UPLOAD PROGRESS",
                         onClick = {
-                            soundManager.playClick()
-                            viewModel.completeWorkout()
+                            if (!isUploading) {
+                                soundManager.playClick()
+                                viewModel.uploadProgress(onComplete = onWorkoutComplete)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
-                }
-            }
-
-            // XP Celebration Overlay
-            AnimatedVisibility(
-                visible = showXpGained != null,
-                enter = scaleIn(tween(500, easing = OvershootInterpolator().toEasing())) + fadeIn(),
-                exit = fadeOut() + scaleOut(),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(240.dp)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(Color(0xFFFFD700).copy(alpha = 0.2f), Color.Transparent)
-                            ),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "DATA RECORDED",
-                            color = ElectricCyan,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp,
-                            fontSize = 14.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "+$showXpGained XP",
-                            color = Color.White,
-                            style = TextStyle(
-                                fontSize = 42.sp,
-                                fontWeight = FontWeight.Black,
-                                shadow = Shadow(ElectricCyan, blurRadius = 20f)
-                            )
-                        )
-                    }
                 }
             }
 
@@ -424,8 +382,8 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut()
+        enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+        exit = shrinkVertically(tween(200)) + fadeOut(tween(200))
     ) {
         ExorkNeumorphicCard(
             modifier = Modifier.fillMaxWidth()
@@ -481,5 +439,5 @@ fun ExerciseEntryItem(exercise: Exercise, onRemove: () -> Unit, onStartTimer: ((
     }
 }
 
-private fun android.view.animation.Interpolator.toEasing() = Easing { x -> getInterpolation(x) }
+
 

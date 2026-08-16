@@ -17,6 +17,7 @@ enum class ExerciseCategory {
 @Entity(tableName = "workout_table")
 data class WorkoutEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val remoteId: String = java.util.UUID.randomUUID().toString(),
     val date: Long,
     val totalXpGained: Int
 )

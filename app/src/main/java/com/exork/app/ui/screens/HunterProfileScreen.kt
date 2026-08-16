@@ -220,8 +220,8 @@ fun PersonalRecordsSection(user: com.exork.app.model.User) {
         prs.forEachIndexed { index, (label, value, unit) ->
             AnimatedVisibility(
                 visible = isVisible,
-                enter = fadeIn(tween(600, delayMillis = index * 150)) + 
-                        slideInHorizontally(tween(600, delayMillis = index * 150)) { -it / 2 }
+                enter = fadeIn(tween(300, delayMillis = index * 75)) + 
+                        slideInHorizontally(tween(300, delayMillis = index * 75)) { -it / 2 }
             ) {
                 PRCard(label, value, unit)
             }
@@ -233,7 +233,7 @@ fun PersonalRecordsSection(user: com.exork.app.model.User) {
 fun PRCard(label: String, value: Int, unit: String) {
     val animatedValue by animateIntAsState(
         targetValue = value,
-        animationSpec = tween(2000, easing = FastOutSlowInEasing), label = ""
+        animationSpec = tween(1000, easing = FastOutSlowInEasing), label = ""
     )
 
     ExorkNeumorphicCard(

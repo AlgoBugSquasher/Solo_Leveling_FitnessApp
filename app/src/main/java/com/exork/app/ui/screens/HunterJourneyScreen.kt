@@ -223,14 +223,14 @@ fun TimelineMilestone(event: JourneyEvent, isLast: Boolean) {
         initialValue = 0.2f,
         targetValue = 0.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
+            animation = tween(1000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ), label = "glow"
     )
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(tween(800)) + slideInVertically(tween(800)) { 50 }
+        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { 50 }
     ) {
         Row(
             modifier = Modifier

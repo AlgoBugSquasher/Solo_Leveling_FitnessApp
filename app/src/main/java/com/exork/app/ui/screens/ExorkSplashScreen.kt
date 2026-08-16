@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.exork.app.R
 import com.exork.app.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,7 +40,7 @@ fun ExorkSplashScreen(
         initialValue = 100f,
         targetValue = 180f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
+            animation = tween(750, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glowRadius"
@@ -50,7 +51,7 @@ fun ExorkSplashScreen(
         initialValue = 0.3f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
+            animation = tween(500, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "textAlpha"
@@ -58,20 +59,23 @@ fun ExorkSplashScreen(
 
     LaunchedEffect(Unit) {
         // Run entrance animations in parallel
-        launch {
+        val entranceJob = launch {
             entranceAnimation.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(1500, easing = FastOutSlowInEasing)
+                animationSpec = tween(1000, easing = FastOutSlowInEasing)
             )
         }
-        launch {
+        val alphaJob = launch {
             alphaAnimation.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(1000)
+                animationSpec = tween(800)
             )
         }
         
-        delay(2500)
+        // Wait for animations and a safe buffer
+        joinAll(entranceJob, alphaJob)
+        delay(300) 
+        
         onAnimationComplete()
     }
 

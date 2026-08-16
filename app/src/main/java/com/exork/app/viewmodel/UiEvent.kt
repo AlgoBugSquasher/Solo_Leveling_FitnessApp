@@ -20,4 +20,5 @@ sealed class UiEvent {
     data object PenaltyTriggered : UiEvent()
     data class BackupSuccess(val message: String) : UiEvent()
     data class BackupError(val message: String) : UiEvent()
+    data object Logout : UiEvent()
 }
