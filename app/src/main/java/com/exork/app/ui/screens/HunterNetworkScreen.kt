@@ -7,32 +7,30 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -43,7 +41,7 @@ import com.exork.app.viewmodel.HunterNetworkViewModel
 import com.exork.app.viewmodel.NetworkTab
 import com.exork.app.viewmodel.NetworkUiEvent
 import com.google.firebase.auth.FirebaseAuth
-import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,10 +59,30 @@ fun HunterNetworkScreen(
     val isSearching by viewModel.isSearching.collectAsState()
     val incomingManaCount by viewModel.incomingManaCount.collectAsState()
 
+    val tabs = listOf("FIND HUNTERS", "MY ALLIES")
+    val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
+    val coroutineScope = rememberCoroutineScope()
+
     var selectedHunter by remember { mutableStateOf<HunterProfile?>(null) }
     var showInspectDialog by remember { mutableStateOf(false) }
     var showAllyActions by remember { mutableStateOf(false) }
     var showRemoveConfirm by remember { mutableStateOf(false) }
+
+    // Sync ViewModel Tab to Pager
+    LaunchedEffect(currentTab) {
+        val targetPage = if (currentTab == NetworkTab.FIND) 0 else 1
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage)
+        }
+    }
+
+    // Sync Pager to ViewModel Tab
+    LaunchedEffect(pagerState.currentPage) {
+        val targetTab = if (pagerState.currentPage == 0) NetworkTab.FIND else NetworkTab.ALLIES
+        if (currentTab != targetTab) {
+            viewModel.setTab(targetTab)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
@@ -77,42 +95,142 @@ fun HunterNetworkScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("HUNTER NETWORK", style = ExorkTypography.titleLarge.copy(fontWeight = FontWeight.Black)) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-        },
         containerColor = Color(0xFF0E1013)
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Tab Toggle
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0E1013))
+        ) {
+            // 1. Top Header Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(ObsidianVoid)
-                    .padding(4.dp)
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TabItem(
-                    text = "FIND HUNTERS",
-                    isSelected = currentTab == NetworkTab.FIND,
-                    modifier = Modifier.weight(1f),
-                    onClick = { viewModel.setTab(NetworkTab.FIND) }
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "HUNTER NETWORK",
+                    style = ExorkTypography.titleMedium.copy(fontWeight = FontWeight.Black),
+                    color = Color.White
                 )
-                TabItem(
-                    text = "MY ALLIES",
-                    badgeCount = incomingRequests.size,
-                    isSelected = currentTab == NetworkTab.ALLIES,
-                    modifier = Modifier.weight(1f),
-                    onClick = { viewModel.setTab(NetworkTab.ALLIES) }
-                )
+            }
+
+            // 2. Sliding Glassmorphic Tab Switcher
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFF0F0F14),
+                    border = BorderStroke(1.dp, Color(0xFF22222E))
+                ) {
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .height(42.dp)
+                            .padding(3.dp)
+                    ) {
+                        val tabWidth = maxWidth / 2
+                        val indicatorOffset = tabWidth * (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+
+                        // Smooth Sliding Glow Pill
+                        Box(
+                            modifier = Modifier
+                                .offset(x = indicatorOffset)
+                                .width(tabWidth)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(ElectricCyan, NeonBlue)
+                                    )
+                                )
+                        )
+
+                        // Tab Labels Layer
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            // Find Hunters Tab
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "FIND HUNTERS",
+                                    style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (pagerState.currentPage == 0 && pagerState.currentPageOffsetFraction < 0.5f) 
+                                        Color(0xFF0A0A0E) else Color.Gray
+                                )
+                            }
+
+                            // My Allies Tab
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "MY ALLIES",
+                                        style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (pagerState.currentPage == 1 || pagerState.currentPageOffsetFraction >= 0.5f) 
+                                            Color(0xFF0A0A0E) else Color.Gray
+                                    )
+                                    if (incomingRequests.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .background(
+                                                    if (pagerState.currentPage == 1 || pagerState.currentPageOffsetFraction >= 0.5f)
+                                                        Color.Black else ElectricCyan,
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = incomingRequests.size.toString(),
+                                                style = ExorkTypography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Black),
+                                                color = if (pagerState.currentPage == 1 || pagerState.currentPageOffsetFraction >= 0.5f)
+                                                    ElectricCyan else Color.Black
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Mana Infusion Banner
@@ -149,108 +267,118 @@ fun HunterNetworkScreen(
                 }
             }
 
-            if (currentTab == NetworkTab.FIND) {
-                // Search Bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.updateSearchQuery(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    placeholder = { Text("Search by Hunter Name...", color = Color.Gray) },
-                    leadingIcon = { Icon(Icons.Default.Search, null, tint = ElectricCyan) },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = ObsidianVoid,
-                        unfocusedContainerColor = ObsidianVoid,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    )
-                )
+            // 3. Horizontal Pager
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { page ->
+                if (page == 0) {
+                    // FIND TAB CONTENT
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.updateSearchQuery(it) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            placeholder = { Text("Search by Hunter Name...", color = Color.Gray) },
+                            leadingIcon = { Icon(Icons.Default.Search, null, tint = ElectricCyan) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = ObsidianVoid,
+                                unfocusedContainerColor = ObsidianVoid,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
 
-                if (isSearching) {
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = ElectricCyan)
-                    }
-                }
+                        if (isSearching) {
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = ElectricCyan)
+                            }
+                        }
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(searchResults) { hunter ->
-                        val isAlly = allies.any { it.userId == hunter.userId }
-                        val isRequested = sentRequestIds.contains(hunter.userId)
-                        
-                        HunterResultCard(
-                            hunter = hunter,
-                            isAlly = isAlly,
-                            isRequested = isRequested,
-                            onClick = {
-                                selectedHunter = hunter
-                                showInspectDialog = true
-                            },
-                            onSendMana = { viewModel.sendMana(hunter) }
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            if (!isAlly && !isRequested) {
-                                viewModel.sendAllyRequest(hunter)
+                            items(searchResults) { hunter ->
+                                val isAlly = allies.any { it.userId == hunter.userId }
+                                val isRequested = sentRequestIds.contains(hunter.userId)
+                                
+                                HunterResultCard(
+                                    hunter = hunter,
+                                    isAlly = isAlly,
+                                    isRequested = isRequested,
+                                    onClick = {
+                                        selectedHunter = hunter
+                                        showInspectDialog = true
+                                    },
+                                    onSendMana = { viewModel.sendMana(hunter) }
+                                ) {
+                                    if (!isAlly && !isRequested) {
+                                        viewModel.sendAllyRequest(hunter)
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            } else {
-                // Allies List
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (incomingRequests.isNotEmpty()) {
+                } else {
+                    // ALLIES TAB CONTENT
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (incomingRequests.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "PENDING ALLY REQUESTS",
+                                    style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Black),
+                                    color = ElectricCyan,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                            items(incomingRequests) { request ->
+                                IncomingRequestCard(
+                                    hunter = request,
+                                    onAccept = { viewModel.acceptRequest(request) },
+                                    onDecline = { viewModel.declineRequest(request) }
+                                )
+                            }
+                            item { Spacer(modifier = Modifier.height(16.dp)) }
+                        }
+
                         item {
                             Text(
-                                "PENDING ALLY REQUESTS",
+                                "YOUR ALLIES",
                                 style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                color = ElectricCyan,
+                                color = TitaniumGray,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
-                        items(incomingRequests) { request ->
-                            IncomingRequestCard(
-                                hunter = request,
-                                onAccept = { viewModel.acceptRequest(request) },
-                                onDecline = { viewModel.declineRequest(request) }
-                            )
-                        }
-                        item { Spacer(modifier = Modifier.height(16.dp)) }
-                    }
 
-                    item {
-                        Text(
-                            "YOUR ALLIES",
-                            style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Black),
-                            color = TitaniumGray,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-
-                    if (allies.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                                Text("NO ALLIES IN YOUR NETWORK", color = Color.Gray)
+                        if (allies.isEmpty()) {
+                            item {
+                                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                                    Text("NO ALLIES IN YOUR NETWORK", color = Color.Gray)
+                                }
                             }
                         }
-                    }
-                    items(allies) { ally ->
-                        HunterResultCard(
-                            hunter = ally, 
-                            isAlly = true, 
-                            onClick = {
-                                selectedHunter = ally
-                                showAllyActions = true
-                            },
-                            onSendMana = { viewModel.sendMana(ally) }
-                        ) {}
+                        items(allies) { ally ->
+                            HunterResultCard(
+                                hunter = ally, 
+                                isAlly = true, 
+                                onClick = {
+                                    selectedHunter = ally
+                                    showAllyActions = true
+                                },
+                                onSendMana = { viewModel.sendMana(ally) }
+                            ) {}
+                        }
                     }
                 }
             }
@@ -378,44 +506,6 @@ fun HunterNetworkScreen(
                     }
                 }
             )
-        }
-    }
-}
-
-@Composable
-fun TabItem(text: String, isSelected: Boolean, modifier: Modifier, badgeCount: Int = 0, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(40.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) ElectricCyan else Color.Transparent
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 8.dp)
-        ) {
-            Text(
-                text = text,
-                style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = if (isSelected) Color.Black else Color.Gray
-            )
-            if (badgeCount > 0) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                    color = if (isSelected) Color.Black else ElectricCyan,
-                    shape = CircleShape,
-                    modifier = Modifier.size(18.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = badgeCount.toString(),
-                            style = ExorkTypography.labelSmall.copy(fontWeight = FontWeight.Black),
-                            color = if (isSelected) ElectricCyan else Color.Black
-                        )
-                    }
-                }
-            }
         }
     }
 }

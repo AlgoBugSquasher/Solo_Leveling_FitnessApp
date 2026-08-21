@@ -16,9 +16,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.map
@@ -449,8 +451,9 @@ class FitnessRepository(
         }
     }
 
-    suspend fun initializeUserInFirestore() {
-        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return
+    suspend fun initializeUserInFirestore(): Result<Unit> {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser 
+            ?: return Result.failure(Exception("No authenticated user found"))
         val db = FirebaseFirestore.getInstance()
         
         val currentUser = user.first() ?: User()
@@ -465,10 +468,14 @@ class FitnessRepository(
             "lastSync" to System.currentTimeMillis()
         )
         
-        try {
-            db.collection("users").document(firebaseUser.uid).set(profile, com.google.firebase.firestore.SetOptions.merge()).await()
+        return try {
+            db.collection("users").document(firebaseUser.uid)
+                .set(profile, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            Result.success(Unit)
         } catch (e: Exception) {
             android.util.Log.e("FitnessRepository", "Initialization failed", e)
+            Result.failure(e)
         }
     }
 
@@ -1355,7 +1362,15 @@ class FitnessRepository(
         val auth = FirebaseAuth.getInstance()
         val currentUserId = auth.currentUser?.uid ?: return@withContext Result.failure(Exception("Not logged in"))
         val db = FirebaseFirestore.getInstance()
-        val localUser = user.first() ?: return@withContext Result.failure(Exception("Local profile not found"))
+        
+        // Fix: Wait for non-null user to ensure initialization has finished
+        val localUser = try {
+            withTimeout(3000) {
+                user.filterNotNull().first()
+            }
+        } catch (e: Exception) {
+            return@withContext Result.failure(Exception("Profile not found. Please wait for synchronization to finish."))
+        }
         
         val userDoc = try { db.collection("users").document(currentUserId).get().await() } catch(e: Exception) { null }
         val username = userDoc?.getString("username") ?: auth.currentUser?.displayName ?: "Hunter"

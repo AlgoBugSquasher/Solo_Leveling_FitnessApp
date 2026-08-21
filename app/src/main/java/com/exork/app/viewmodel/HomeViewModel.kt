@@ -96,16 +96,23 @@ class HomeViewModel(
     val floatingXpReward: StateFlow<Int?> = _floatingXpReward.asStateFlow()
 
     private var userSnapshotListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private var userSyncJob: Job? = null
 
     fun dismissQuestDialog() {
         _shouldShowQuestDialog.value = false
     }
 
     fun logout() {
+        clearSessionState()
+    }
+
+    fun clearSessionState() {
         viewModelScope.launch {
             // 1. Force state reset FIRST to avoid race conditions
             _username.value = null
             _avatarUri.value = null
+            lastSeenUser = null
+            lastSeenStreak = 0
             
             // 2. Emit logout event to MainActivity
             _uiEvent.emit(UiEvent.Logout)
@@ -241,7 +248,7 @@ class HomeViewModel(
                 lastSeenUser = it
             }
         }
-        .filterNotNull()
+        .map { it ?: User() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), User())
 
     init {
@@ -257,116 +264,144 @@ class HomeViewModel(
     }
 
     fun syncFromRemote() {
-        viewModelScope.launch {
+        userSyncJob?.cancel()
+        userSyncJob = viewModelScope.launch {
             val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             if (firebaseUser != null) {
                 _isSyncing.value = true
                 
-                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                val doc = try { db.collection("users").document(firebaseUser.uid).get().await() } catch(e: Exception) { null }
-                
-                if (doc != null && doc.exists()) {
-                    _username.value = doc.getString("username")
-                    val remoteLastRefresh = doc.getLong("lastQuestRefreshDate") ?: 0L
-                    val remoteXp = doc.getLong("totalXp")?.toInt() ?: doc.getLong("xp")?.toInt() ?: 0
-                    val remoteLevel = doc.getLong("hunterLevel")?.toInt() ?: 1
-                    val remoteStreak = doc.getLong("currentStreak")?.toInt() ?: 0
-                    val remoteLastQuestCompletedDate = doc.getString("lastQuestCompletedDate") ?: ""
-                    val remotePhotoUrl = doc.getString("photoUrl")
-                    val remoteGuildId = doc.getString("guildId")
-                    val remoteGuildName = doc.getString("guildName")
-                    val remoteGuildTag = doc.getString("guildTag")
+                try {
+                    // Safety timeout: 5s for the entire sync process
+                    withTimeoutOrNull(5000L) {
+                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        val doc = try { db.collection("users").document(firebaseUser.uid).get().await() } catch(e: Exception) { null }
+                        
+                        if (doc != null && doc.exists()) {
+                            _username.value = doc.getString("username")
+                            val remoteLastRefresh = doc.getLong("lastQuestRefreshDate") ?: 0L
+                            val remoteXp = doc.getLong("totalXp")?.toInt() ?: doc.getLong("xp")?.toInt() ?: 0
+                            val remoteLevel = doc.getLong("hunterLevel")?.toInt() ?: 1
+                            val remoteStreak = doc.getLong("currentStreak")?.toInt() ?: 0
+                            val remoteLastQuestCompletedDate = doc.getString("lastQuestCompletedDate") ?: ""
+                            val remotePhotoUrl = doc.getString("photoUrl")
+                            val remoteGuildId = doc.getString("guildId")
+                            val remoteGuildName = doc.getString("guildName")
+                            val remoteGuildTag = doc.getString("guildTag")
 
-                    // 1. Check if local DB is empty
-                    val currentUserSnapshot = repository.user.first()
-                    if (currentUserSnapshot == null || (currentUserSnapshot.totalXpEarned == 0 && currentUserSnapshot.totalWorkouts == 0)) {
-                        val remoteJson = doc.getString("backup_json")
-                        if (remoteJson != null) {
-                            // 2. Perform full restore from JSON
-                            performDataRestore(remoteJson, isRemoteSync = true)
+                            // 1. Check if local DB is empty
+                            val currentUserSnapshot = repository.user.first()
+                            if (currentUserSnapshot == null || (currentUserSnapshot.totalXpEarned == 0 && currentUserSnapshot.totalWorkouts == 0)) {
+                                val remoteJson = doc.getString("backup_json")
+                                if (remoteJson != null) {
+                                    // 2. Perform full restore from JSON
+                                    performDataRestore(remoteJson, isRemoteSync = true)
+                                }
+                            }
+
+                            // 2.5 Pull workout history from cloud
+                            repository.fetchWorkoutHistoryFromCloud()
+
+                            // 3. FORCE OVERWRITE STALE JSON DATA WITH LIVE ROOT FIELDS
+                            val userAfterRestore = repository.user.first() ?: User()
+                            repository.updateUser(userAfterRestore.copy(
+                                totalXpEarned = remoteXp,
+                                xp = XpCalculator.calculateCurrentLevelXp(remoteXp, remoteLevel),
+                                level = remoteLevel,
+                                streak = remoteStreak,
+                                lastQuestRefreshDate = remoteLastRefresh,
+                                lastQuestCompletedDate = remoteLastQuestCompletedDate,
+                                photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl,
+                                guildId = remoteGuildId ?: userAfterRestore.guildId,
+                                guildName = remoteGuildName ?: userAfterRestore.guildName,
+                                guildTag = remoteGuildTag ?: userAfterRestore.guildTag
+                            ))
+                            
+                            // Update in-memory avatar state if found
+                            if (remotePhotoUrl != null) {
+                                _avatarUri.value = remotePhotoUrl
+                            }
+
+                            // 4. Pull live quests if they are for today
+                            val dailyQuestsMap = doc.get("dailyQuests") as? Map<String, Any>
+                            if (dailyQuestsMap != null && !shouldRefreshQuests(remoteLastRefresh, System.currentTimeMillis())) {
+                                val remoteQuests = dailyQuestsMap.values.mapNotNull { 
+                                    val q = it as? Map<String, Any> ?: return@mapNotNull null
+                                    DailyQuest(
+                                        id = (q["id"] as? Long)?.toInt() ?: 1,
+                                        title = q["title"] as? String ?: "QUEST",
+                                        currentProgress = (q["currentProgress"] as? Long)?.toInt() ?: 0,
+                                        targetValue = (q["targetValue"] as? Long)?.toInt() ?: 20,
+                                        xpReward = (q["xpReward"] as? Long)?.toInt() ?: 50,
+                                        isCompleted = q["isCompleted"] as? Boolean ?: false
+                                    )
+                                }
+                                if (remoteQuests.isNotEmpty()) {
+                                    repository.clearDailyQuests()
+                                    repository.insertDailyQuests(remoteQuests)
+                                }
+                            }
+
+                            // 5. Pull live planned exercises
+                            val remotePlannedMap = doc.get("plannedExercises") as? Map<String, Any>
+                            if (remotePlannedMap != null) {
+                                val remoteExercises = remotePlannedMap.values.mapNotNull {
+                                    val e = it as? Map<String, Any> ?: return@mapNotNull null
+                                    PlannedExercise(
+                                        dayOfWeek = (e["dayOfWeek"] as? Long)?.toInt() ?: 1,
+                                        name = e["name"] as? String ?: "EXERCISE",
+                                        trackingType = ExerciseTrackingType.valueOf(e["trackingType"] as? String ?: "REPS"),
+                                        sets = (e["sets"] as? Long)?.toInt(),
+                                        reps = (e["reps"] as? Long)?.toInt(),
+                                        seconds = (e["seconds"] as? Long)?.toInt(),
+                                        distanceKm = e["distanceKm"] as? Double,
+                                        isCompleted = e["isCompleted"] as? Boolean ?: false,
+                                        lastCompletedWeek = (e["lastCompletedWeek"] as? Long)?.toInt() ?: 0,
+                                        lastCompletedYear = (e["lastCompletedYear"] as? Long)?.toInt() ?: 0
+                                    )
+                                }
+                                if (remoteExercises.isNotEmpty()) {
+                                    repository.clearAllPlannedExercises()
+                                    repository.insertPlannedExercises(remoteExercises)
+                                }
+                            }
+
+                            // 6. Pull live notes directly from sub-collection (Single Source of Truth)
+                            repository.fetchNotesFromFirestore()
+
+                            startRealTimeUserListener(firebaseUser.uid)
+                        } else {
+                            val initResult = repository.initializeUserInFirestore()
+                            if (initResult.isSuccess) {
+                                // After successful creation, hydrate local DB to avoid race conditions
+                                repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
+                                
+                                // After successful creation, start listening
+                                startRealTimeUserListener(firebaseUser.uid)
+                            } else {
+                                // Handle failure
+                                _uiEvent.emit(UiEvent.BackupError("System Initialization Failed."))
+                                _isSyncing.value = false
+                                return@withTimeoutOrNull
+                            }
                         }
+
+                        if (_username.value == null) {
+                            queueDialog(DialogType.USERNAME_SETUP)
+                        }
+                        
+                        checkPenalty()
+                        checkAndRefreshQuests()
                     }
-
-                    // 2.5 Pull workout history from cloud
-                    repository.fetchWorkoutHistoryFromCloud()
-
-                    // 3. FORCE OVERWRITE STALE JSON DATA WITH LIVE ROOT FIELDS
-                    val userAfterRestore = repository.user.first() ?: User()
-                    repository.updateUser(userAfterRestore.copy(
-                        totalXpEarned = remoteXp,
-                        xp = XpCalculator.calculateCurrentLevelXp(remoteXp, remoteLevel),
-                        level = remoteLevel,
-                        streak = remoteStreak,
-                        lastQuestRefreshDate = remoteLastRefresh,
-                        lastQuestCompletedDate = remoteLastQuestCompletedDate,
-                        photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl,
-                        guildId = remoteGuildId ?: userAfterRestore.guildId,
-                        guildName = remoteGuildName ?: userAfterRestore.guildName,
-                        guildTag = remoteGuildTag ?: userAfterRestore.guildTag
-                    ))
-
-                    // 4. Pull live quests if they are for today
-                    val dailyQuestsMap = doc.get("dailyQuests") as? Map<String, Any>
-                    if (dailyQuestsMap != null && !shouldRefreshQuests(remoteLastRefresh, System.currentTimeMillis())) {
-                        val remoteQuests = dailyQuestsMap.values.mapNotNull { 
-                            val q = it as? Map<String, Any> ?: return@mapNotNull null
-                            DailyQuest(
-                                id = (q["id"] as? Long)?.toInt() ?: 1,
-                                title = q["title"] as? String ?: "QUEST",
-                                currentProgress = (q["currentProgress"] as? Long)?.toInt() ?: 0,
-                                targetValue = (q["targetValue"] as? Long)?.toInt() ?: 20,
-                                xpReward = (q["xpReward"] as? Long)?.toInt() ?: 50,
-                                isCompleted = q["isCompleted"] as? Boolean ?: false
-                            )
-                        }
-                        if (remoteQuests.isNotEmpty()) {
-                            repository.clearDailyQuests()
-                            repository.insertDailyQuests(remoteQuests)
-                        }
-                    }
-
-                    // 5. Pull live planned exercises
-                    val remotePlannedMap = doc.get("plannedExercises") as? Map<String, Any>
-                    if (remotePlannedMap != null) {
-                        val remoteExercises = remotePlannedMap.values.mapNotNull {
-                            val e = it as? Map<String, Any> ?: return@mapNotNull null
-                            PlannedExercise(
-                                dayOfWeek = (e["dayOfWeek"] as? Long)?.toInt() ?: 1,
-                                name = e["name"] as? String ?: "EXERCISE",
-                                trackingType = ExerciseTrackingType.valueOf(e["trackingType"] as? String ?: "REPS"),
-                                sets = (e["sets"] as? Long)?.toInt(),
-                                reps = (e["reps"] as? Long)?.toInt(),
-                                seconds = (e["seconds"] as? Long)?.toInt(),
-                                distanceKm = e["distanceKm"] as? Double,
-                                isCompleted = e["isCompleted"] as? Boolean ?: false,
-                                lastCompletedWeek = (e["lastCompletedWeek"] as? Long)?.toInt() ?: 0,
-                                lastCompletedYear = (e["lastCompletedYear"] as? Long)?.toInt() ?: 0
-                            )
-                        }
-                        if (remoteExercises.isNotEmpty()) {
-                            repository.clearAllPlannedExercises()
-                            repository.insertPlannedExercises(remoteExercises)
-                        }
-                    }
-
-                    // 6. Pull live notes directly from sub-collection (Single Source of Truth)
-                    repository.fetchNotesFromFirestore()
-
-                    startRealTimeUserListener(firebaseUser.uid)
-                } else {
-                    repository.initializeUserInFirestore()
+                } catch (e: Exception) {
+                    android.util.Log.e("SYNC_ERROR", "Critical error during sync", e)
+                } finally {
+                    _isSyncing.value = false
                 }
-
-                if (_username.value == null) {
-                    queueDialog(DialogType.USERNAME_SETUP)
-                }
-                
-                checkPenalty()
-                checkAndRefreshQuests()
-                _isSyncing.value = false
             } else {
                 checkPenalty()
-                checkAndRefreshQuests()
+                viewModelScope.launch {
+                    checkAndRefreshQuests()
+                }
             }
         }
     }
@@ -383,6 +418,7 @@ class HomeViewModel(
                 val remoteLastQuestDate = snapshot.getString("lastQuestCompletedDate") ?: ""
                 val remoteLevel = snapshot.getLong("hunterLevel")?.toInt() ?: 1
                 val remoteRank = snapshot.getString("hunterRank") ?: "E-Rank Hunter"
+                val remotePhotoUrl = snapshot.getString("photoUrl")
 
                 viewModelScope.launch {
                     val currentUser = repository.user.first()
@@ -391,7 +427,8 @@ class HomeViewModel(
                         if (remoteXp != currentUser.totalXpEarned || 
                             remoteStreak != currentUser.streak || 
                             remoteLastQuestDate != currentUser.lastQuestCompletedDate ||
-                            remoteLevel != currentUser.level) {
+                            remoteLevel != currentUser.level ||
+                            remotePhotoUrl != currentUser.photoUrl) {
                             
                             // If XP increased, emit gained event for global UI popup
                             if (remoteXp > currentUser.totalXpEarned) {
@@ -403,8 +440,13 @@ class HomeViewModel(
                                 streak = remoteStreak,
                                 lastQuestCompletedDate = remoteLastQuestDate,
                                 level = remoteLevel,
-                                rank = remoteRank
+                                rank = remoteRank,
+                                photoUrl = remotePhotoUrl ?: currentUser.photoUrl
                             ))
+                            
+                            if (remotePhotoUrl != null) {
+                                _avatarUri.value = remotePhotoUrl
+                            }
                         }
                     }
                 }
@@ -477,34 +519,39 @@ class HomeViewModel(
         }
     }
 
-    private fun checkAndRefreshQuests() {
-        viewModelScope.launch {
-            val currentUser = repository.user.filterNotNull().first()
-            val now = System.currentTimeMillis()
-            val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-
-            // Fix: Bulletproof Suppression
-            if (currentUser.lastQuestCompletedDate == todayDateString) {
-                android.util.Log.d("EXORK_QUEST", "Suppressed Quest Popup: Already completed today ($todayDateString)")
-                return@launch
+    private suspend fun checkAndRefreshQuests() {
+        val currentUser = try {
+            withTimeout(3000L) {
+                repository.user.filterNotNull().first()
             }
+        } catch (e: Exception) {
+            android.util.Log.e("EXORK_QUEST", "Timed out waiting for local user during quest refresh", e)
+            return
+        }
+        val now = System.currentTimeMillis()
+        val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+        // Fix: Bulletproof Suppression
+        if (currentUser.lastQuestCompletedDate == todayDateString) {
+            android.util.Log.d("EXORK_QUEST", "Suppressed Quest Popup: Already completed today ($todayDateString)")
+            return
+        }
+        
+        if (shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)) {
+            val newQuests = listOf(
+                DailyQuest(id = 1, title = "PUSH-UPS", targetValue = (15..30).random(), xpReward = 50),
+                DailyQuest(id = 2, title = "PULL-UPS", targetValue = (10..15).random(), xpReward = 50),
+                DailyQuest(id = 3, title = "PLANK", targetValue = (60..90).random(), xpReward = 50)
+            )
+            repository.clearDailyQuests()
+            repository.insertDailyQuests(newQuests)
+            repository.updateUser(currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0))
+            notifyWidget()
             
-            if (shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)) {
-                val newQuests = listOf(
-                    DailyQuest(id = 1, title = "PUSH-UPS", targetValue = (15..30).random(), xpReward = 50),
-                    DailyQuest(id = 2, title = "PULL-UPS", targetValue = (10..15).random(), xpReward = 50),
-                    DailyQuest(id = 3, title = "PLANK", targetValue = (60..90).random(), xpReward = 50)
-                )
-                repository.clearDailyQuests()
-                repository.insertDailyQuests(newQuests)
-                repository.updateUser(currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0))
-                notifyWidget()
-                
-                if (!preferencesManager.hasAcceptedQualifications()) {
-                    queueDialog(DialogType.WELCOME)
-                } else {
-                    queueDialog(DialogType.QUEST_INFO)
-                }
+            if (!preferencesManager.hasAcceptedQualifications()) {
+                queueDialog(DialogType.WELCOME)
+            } else {
+                queueDialog(DialogType.QUEST_INFO)
             }
         }
     }
@@ -697,6 +744,7 @@ class HomeViewModel(
                 put("totalHangingSeconds", user.totalHangingSeconds)
                 put("totalExplosivePullups", user.totalExplosivePullups)
                 put("lastQuestCompletedDate", user.lastQuestCompletedDate)
+                put("photoUrl", user.photoUrl ?: JSONObject.NULL)
             }
             json.put("user", userJson)
 
@@ -862,7 +910,8 @@ class HomeViewModel(
                 totalPseudoPlanchePushups = userJson.optInt("totalPseudoPlanchePushups", 0),
                 totalHangingSeconds = userJson.optInt("totalHangingSeconds", 0),
                 totalExplosivePullups = userJson.optInt("totalExplosivePullups", 0),
-                lastQuestCompletedDate = userJson.optString("lastQuestCompletedDate", "")
+                lastQuestCompletedDate = userJson.optString("lastQuestCompletedDate", ""),
+                photoUrl = if (userJson.isNull("photoUrl")) null else userJson.optString("photoUrl", null)
             )
 
             // 2. Abilities

@@ -21,13 +21,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exork.app.R
 import com.exork.app.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.*
 
 @Composable
 fun ExorkSplashScreen(
-    onAnimationComplete: () -> Unit
+    onNavigateToHome: () -> Unit,
+    onNavigateToLogin: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "splashGlow")
     
@@ -57,26 +57,54 @@ fun ExorkSplashScreen(
         label = "textAlpha"
     )
 
+    var hasNavigated by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
-        // Run entrance animations in parallel
-        val entranceJob = launch {
+        val minSplashDelay = 1200L
+        val startTime = System.currentTimeMillis()
+
+        // 1. Resolve Auth with strict 2.5s maximum timeout
+        val authUser = withTimeoutOrNull(2500L) {
+            val auth = FirebaseAuth.getInstance()
+            // Wait briefly for Firebase Auth instance to initialize if currentUser is null initially
+            if (auth.currentUser == null) {
+                delay(300)
+            }
+            auth.currentUser
+        }
+
+        // 2. Run entrance animations in parallel
+        launch {
             entranceAnimation.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(1000, easing = FastOutSlowInEasing)
+                animationSpec = tween(750, easing = FastOutSlowInEasing)
             )
         }
-        val alphaJob = launch {
+        launch {
             alphaAnimation.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(800)
+                animationSpec = tween(500)
             )
         }
-        
-        // Wait for animations and a safe buffer
-        joinAll(entranceJob, alphaJob)
-        delay(300) 
-        
-        onAnimationComplete()
+
+        // 3. Ensure minimum branding animation time has elapsed
+        val elapsedTime = System.currentTimeMillis() - startTime
+        val remainingDelay = (minSplashDelay - elapsedTime).coerceAtLeast(0L)
+        if (remainingDelay > 0) {
+            delay(remainingDelay)
+        }
+
+        // 4. Guaranteed Safe Single Navigation
+        if (!hasNavigated) {
+            hasNavigated = true
+            withContext(Dispatchers.Main.immediate) {
+                if (authUser != null) {
+                    onNavigateToHome()
+                } else {
+                    onNavigateToLogin()
+                }
+            }
+        }
     }
 
     Box(

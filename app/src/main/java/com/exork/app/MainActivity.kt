@@ -35,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import com.exork.app.ui.theme.ExorkTheme
 import com.exork.app.ui.theme.MonarchSlate
 import kotlinx.coroutines.launch
+import coil.imageLoader
 
 data class SystemNotification(
     val title: String = "NOTIFICATION",
@@ -192,12 +193,18 @@ class MainActivity : ComponentActivity() {
                                     com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this@MainActivity, gso).signOut()
                                 } catch (e: Exception) {}
 
-                                // 3. Reset AuthViewModel explicitly if possible
+                                // 3. Clear Coil Image Memory & Disk Cache
+                                try {
+                                    imageLoader.memoryCache?.clear()
+                                    imageLoader.diskCache?.clear()
+                                } catch (e: Exception) {}
+
+                                // 4. Reset AuthViewModel explicitly if possible
                                 // Since it's activity-scoped, we can find it
                                 val authViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AuthViewModel::class.java]
                                 authViewModel.signOut()
 
-                                // 4. Force navigate to auth and clear ENTIRE backstack
+                                // 5. Force navigate to auth and clear ENTIRE backstack
                                 navController.navigate("auth") {
                                     popUpTo(0) {
                                         inclusive = true
@@ -304,18 +311,16 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable("splash") {
                             ExorkSplashScreen(
-                                onAnimationComplete = {
-                                    val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                                    val destination = if (currentUser == null) "auth" else "home"
-                                    
-                                    // Use safe navigation to prevent race condition crashes
-                                    safeNav {
-                                        if (navController.currentDestination?.route == "splash") {
-                                            navController.navigate(destination) {
-                                                popUpTo("splash") { inclusive = true }
-                                                launchSingleTop = true
-                                            }
-                                        }
+                                onNavigateToHome = {
+                                    navController.navigate("home") {
+                                        popUpTo("splash") { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                },
+                                onNavigateToLogin = {
+                                    navController.navigate("auth") {
+                                        popUpTo("splash") { inclusive = true }
+                                        launchSingleTop = true
                                     }
                                 }
                             )

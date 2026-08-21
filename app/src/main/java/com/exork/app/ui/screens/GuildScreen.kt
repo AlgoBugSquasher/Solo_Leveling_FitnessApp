@@ -78,7 +78,6 @@ fun GuildScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .background(ObsidianVoid)
                 .statusBarsPadding()
         ) {
@@ -792,19 +791,25 @@ fun GuildSearchCard(guild: Guild, onJoin: () -> Unit) {
                     Text(
                         text = guild.name.uppercase(),
                         style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black),
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = ElectricCyan.copy(alpha = 0.1f),
-                        border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.2f))
+                        border = BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.2f)),
+                        modifier = Modifier.wrapContentWidth()
                     ) {
                         Text(
                             text = guild.tag,
                             style = ExorkTypography.labelSmall.copy(fontSize = 10.sp),
                             color = ElectricCyan,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -815,6 +820,7 @@ fun GuildSearchCard(guild: Guild, onJoin: () -> Unit) {
                     color = TitaniumGray
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = onJoin,
                 colors = ButtonDefaults.buttonColors(containerColor = ElectricCyan, contentColor = Color.Black),
