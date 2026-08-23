@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eXork Account Deletion</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0A0A0E;
+            color: #E8E8F0;
+        }
+
+        main {
+            max-width: 700px;
+            margin: auto;
+            padding: 50px 20px;
+        }
+
+        .card {
+            background: #12121A;
+            border: 1px solid #272738;
+            border-radius: 18px;
+            padding: 30px;
+            box-shadow: 0 15px 40px rgba(0,0,0,.35);
+        }
+
+        h1 {
+            color: #00F0FF;
+            margin-top: 0;
+        }
+
+        h2 {
+            color: #FF4D5A;
+        }
+
+        p {
+            line-height: 1.7;
+            color: #D2D2DD;
+        }
+
+        .warning {
+            border-left: 4px solid #FF4D5A;
+            padding-left: 15px;
+        }
+
+        a {
+            color: #00F0FF;
+        }
+
+        .button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 13px 20px;
+            border-radius: 10px;
+            background: #FF4D5A;
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<main>
+    <div class="card">
+
+        <h1>eXork Account Deletion</h1>
+
+        <p>
+            This page provides the external account deletion resource
+            for the eXork fitness application.
+        </p>
+
+        <h2>Before You Continue</h2>
+
+        <p class="warning">
+            Account deletion permanently removes your eXork account
+            and associated data after the applicable deletion process
+            is completed.
+        </p>
+
+        <p>
+            eXork currently uses a deletion grace period. A user who
+            signs back into the account during the grace period may
+            cancel the pending deletion.
+        </p>
+
+        <h2>Request Account Deletion</h2>
+
+        <p>
+            To begin an account deletion request, contact the eXork
+            privacy/support address using the account email associated
+            with your eXork account.
+        </p>
+
+        <p>
+            Email:
+            <a href="mailto:omkrishali42@gmail.com?subject=eXork%20Account%20Deletion%20Request">
+                omkrishali42@gmail.com
+            </a>
+        </p>
+
+        <a
+            class="button"
+            href="mailto:omkrishali42@gmail.com?subject=eXork%20Account%20Deletion%20Request">
+            REQUEST ACCOUNT DELETION
+        </a>
+
+        <h2>What Happens Next?</h2>
+
+        <p>
+            We will use the account information provided in your
+            request to identify the relevant eXork account and process
+            the deletion request.
+        </p>
+
+        <p>
+            For questions about account deletion or privacy, contact:
+        </p>
+
+        <p>
+            <a href="mailto:omkrishali42@gmail.com">
+                omkrishali42@gmail.com
+            </a>
+        </p>
+
+    </div>
+</main>
+
+</body>
+</html>

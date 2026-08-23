@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eXork Privacy Policy</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0A0A0E;
+            color: #E8E8F0;
+            line-height: 1.7;
+        }
+
+        main {
+            max-width: 900px;
+            margin: auto;
+            padding: 40px 20px;
+        }
+
+        h1, h2 {
+            color: #00F0FF;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            margin-top: 32px;
+        }
+
+        .meta {
+            color: #A8A8B8;
+            margin-bottom: 30px;
+        }
+
+        a {
+            color: #00F0FF;
+        }
+
+        .card {
+            background: #12121A;
+            border: 1px solid #272738;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 18px;
+        }
+    </style>
+</head>
+
+<body>
+<main>
+
+    <h1>eXork Privacy Policy</h1>
+
+    <div class="meta">
+        <strong>Developer:</strong> OM KRISHALI<br>
+        <strong>Contact:</strong>
+        <a href="mailto:omkrishali42@gmail.com">
+            omkrishali42@gmail.com
+        </a>
+    </div>
+
+    <div class="card">
+        <h2>1. Information We Collect</h2>
+        <p>
+            Depending on how you use eXork, we may process account,
+            authentication, profile, fitness, progression, guild,
+            and Hunter Notes information required to provide the app.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>2. Account and Authentication</h2>
+        <p>
+            eXork uses Firebase Authentication and supported sign-in
+            methods such as email/password and Google Sign-In.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>3. Profile and Fitness Data</h2>
+        <p>
+            eXork may store your username, display name, profile image,
+            Hunter rank, level, XP, workout history, streaks,
+            daily quests, achievements, badges, training plans,
+            guild information, and related progression data.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>4. Hunter Notes</h2>
+        <p>
+            Hunter Notes are associated with your account and
+            synchronized to your account-specific cloud storage.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>5. How We Use Information</h2>
+        <p>
+            We use information to authenticate users, provide fitness
+            and RPG features, synchronize account data, maintain quests,
+            guilds and notes, restore account information, and operate
+            and secure eXork.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>6. Firebase and Third-Party Services</h2>
+        <p>
+            eXork uses Firebase services for authentication,
+            cloud storage, and synchronization. Third-party services
+            may process information according to their own policies.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>7. Data Retention and Deletion</h2>
+        <p>
+            We retain information as reasonably necessary to provide
+            the service, maintain accounts, synchronize data, and meet
+            applicable legal or security obligations.
+        </p>
+
+        <p>
+            eXork supports account deletion. A pending deletion request
+            may be cancelled by signing back into the account during
+            the applicable grace period. Once the deletion process is
+            completed, associated account data is intended to be deleted,
+            subject to applicable retention requirements.
+        </p>
+
+        <p>
+            <strong>External account deletion:</strong>
+            <a href="delete-account.html">Request account deletion</a>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>8. Data Security</h2>
+        <p>
+            We use reasonable technical and organizational measures
+            intended to protect information against unauthorized access,
+            misuse, loss, or alteration.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>9. User-Generated Content</h2>
+        <p>
+            Users may create usernames, profile information,
+            guild-related content, and Hunter Notes.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>10. Children's Privacy</h2>
+        <p>
+            eXork is not intended to knowingly collect personal
+            information from children in violation of applicable law.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>11. Changes to This Privacy Policy</h2>
+        <p>
+            We may update this Privacy Policy when our app, data
+            practices, services, or legal requirements change.
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>12. Contact</h2>
+        <p>
+            <strong>Developer:</strong> OM KRISHALI
+        </p>
+        <p>
+            <strong>Email:</strong>
+            <a href="mailto:omkrishali42@gmail.com">
+                omkrishali42@gmail.com
+            </a>
+        </p>
+    </div>
+
+</main>
+</body>
+</html>
