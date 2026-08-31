@@ -43,6 +43,7 @@ import com.exork.app.ui.theme.*
 import com.exork.app.util.SoundManager
 import com.exork.app.viewmodel.WorkoutViewModel
 import androidx.compose.material.icons.filled.Timer
+import com.exork.app.viewmodel.UiEvent
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,7 +64,7 @@ fun WorkoutScreen(
     LaunchedEffect(Unit) {
         viewModel.uiEvent.collect { event ->
             when (event) {
-                is com.exork.app.viewmodel.UiEvent.XpGained -> {
+                is UiEvent.XpGained -> {
                     soundManager.playQuestComplete()
                 }
                 else -> {}

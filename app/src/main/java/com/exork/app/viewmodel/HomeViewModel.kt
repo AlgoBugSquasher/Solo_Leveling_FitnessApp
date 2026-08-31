@@ -1,7 +1,5 @@
 package com.exork.app.viewmodel
 
-import android.app.AlarmManager
-import android.app.PendingIntent
 import androidx.lifecycle.ViewModel
 import android.content.Context
 import android.content.Intent
@@ -97,6 +95,7 @@ class HomeViewModel(
 
     private var userSnapshotListener: com.google.firebase.firestore.ListenerRegistration? = null
     private var userSyncJob: Job? = null
+    private var hasShownQuestInfoThisSession = false
 
     fun dismissQuestDialog() {
         _shouldShowQuestDialog.value = false
@@ -106,13 +105,20 @@ class HomeViewModel(
         clearSessionState()
     }
 
+    suspend fun scheduleAccountDeletion(): Result<Unit> {
+        return repository.scheduleAccountDeletion()
+    }
+
+    suspend fun cancelAccountDeletion(): Result<Unit> {
+        return repository.cancelAccountDeletion()
+    }
+
     fun clearSessionState() {
         viewModelScope.launch {
             // 1. Force state reset FIRST to avoid race conditions
             _username.value = null
             _avatarUri.value = null
             lastSeenUser = null
-            lastSeenStreak = 0
             
             // 2. Emit logout event to MainActivity
             _uiEvent.emit(UiEvent.Logout)
@@ -121,7 +127,6 @@ class HomeViewModel(
             repository.clearAllDatabase()
             preferencesManager.setAvatarUri(null)
             preferencesManager.setFirstLaunch(true)
-            preferencesManager.setHasAcceptedQualifications(false)
         }
     }
 
@@ -138,6 +143,7 @@ class HomeViewModel(
             preferencesManager.setHasAcceptedQualifications(true)
             dismissActiveDialog()
             queueDialog(DialogType.QUEST_INFO)
+            hasShownQuestInfoThisSession = true
         }
     }
 
@@ -147,47 +153,35 @@ class HomeViewModel(
                 val cloudUrl = repository.uploadAvatar(uri, context)
                 if (cloudUrl != null) {
                     _avatarUri.value = cloudUrl
+                    preferencesManager.setAvatarUri(cloudUrl)
                 }
             } else {
-                preferencesManager.setAvatarUri(null)
+                // Perform clean removal via Repository
+                repository.deleteAvatar()
+                
+                // Clear local memory/preference state
                 _avatarUri.value = null
-                // Clear in Firestore
-                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (firebaseUser != null) {
-                    com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(firebaseUser.uid)
-                        .update("photoUrl", null)
-                }
+                preferencesManager.setAvatarUri(null)
             }
         }
     }
 
-    private val badgeMilestones = listOf(1, 5, 10, 15, 20, 25, 30, 40, 50, 60, 65, 70, 80, 90, 100)
-    
-    private var lastSeenStreak = 0
     private var lastSeenUser: User? = null
 
     val user: StateFlow<User> = repository.user
         .onEach {
-            if (it == null) {
-                // ONLY create a default user if we have an active session
-                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (firebaseUser != null) {
-                    viewModelScope.launch {
-                        repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
-                    }
-                }
-            } else {
-                // Monitor for title unlocks
-                if (it.streak > lastSeenStreak) {
+            if (it != null) {
+                val previousUser = lastSeenUser
+                
+                // Monitor for title unlocks (Handle first emission correctly)
+                if (it.streak > (previousUser?.streak ?: 0)) {
                     val newlyUnlocked = repository.checkAndUnlockTitles(it.streak)
                     newlyUnlocked.forEach { title ->
                         _uiEvent.emit(UiEvent.TitleUnlocked(title))
                     }
-                    lastSeenStreak = it.streak
                 }
 
                 // Monitor for achievement unlocks
-                val previousUser = lastSeenUser
                 if (previousUser != null) {
                     // Monitor for level ups
                     if (it.level > previousUser.level) {
@@ -244,6 +238,11 @@ class HomeViewModel(
                     if (RankCalculator.isPromotion(previousUser.rank, it.rank)) {
                         _uiEvent.emit(UiEvent.RankPromotion(previousUser.rank, it.rank))
                     }
+
+                    // Monitor for Review Milestones
+                    if (it.totalWorkouts > previousUser.totalWorkouts) {
+                        checkReviewMilestone(it.totalWorkouts)
+                    }
                 }
                 lastSeenUser = it
             }
@@ -255,6 +254,41 @@ class HomeViewModel(
         seedTitles()
         observeRestDayStatus()
         observeAuthState()
+        observeQuestInfoForCurrentSession()
+    }
+
+    private fun observeQuestInfoForCurrentSession() {
+        viewModelScope.launch {
+            repository.allDailyQuests.collect { quests ->
+                if (hasShownQuestInfoThisSession) return@collect
+                if (quests.isEmpty()) return@collect
+
+                val anyIncomplete = quests.any { !it.isCompleted }
+                if (anyIncomplete) {
+                    val qualificationAccepted = preferencesManager.hasAcceptedQualifications()
+                    if (!qualificationAccepted) {
+                        queueDialog(DialogType.WELCOME)
+                    } else {
+                        queueDialog(DialogType.QUEST_INFO)
+                        hasShownQuestInfoThisSession = true
+                    }
+                }
+            }
+        }
+    }
+
+    private fun checkReviewMilestone(totalWorkouts: Int) {
+        val lastMilestone = preferencesManager.getLastReviewMilestone()
+        val milestones = listOf(10, 25, 50, 100)
+        
+        val currentMilestone = milestones.findLast { totalWorkouts >= it } ?: 0
+        
+        if (currentMilestone > lastMilestone) {
+            viewModelScope.launch {
+                _uiEvent.emit(UiEvent.RequestReview)
+                preferencesManager.setLastReviewMilestone(currentMilestone)
+            }
+        }
     }
 
     private fun observeAuthState() {
@@ -269,7 +303,8 @@ class HomeViewModel(
             val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             if (firebaseUser != null) {
                 _isSyncing.value = true
-                
+                var shouldNotifyCancellation = false
+
                 try {
                     // Safety timeout: 5s for the entire sync process
                     withTimeoutOrNull(5000L) {
@@ -287,8 +322,33 @@ class HomeViewModel(
                             val remoteGuildId = doc.getString("guildId")
                             val remoteGuildName = doc.getString("guildName")
                             val remoteGuildTag = doc.getString("guildTag")
+                            val remoteDeletionRequested = doc.getBoolean("deletionRequested") ?: false
+                            val remoteScheduledDeletionAt = doc.getLong("scheduledDeletionAt") ?: 0L
+                            
+                            var effectiveDeletionRequested = remoteDeletionRequested
+                            var effectiveScheduledDeletionAt = remoteScheduledDeletionAt
 
-                            // 1. Check if local DB is empty
+                            // 1. Check for Account Deletion Status
+                            if (remoteDeletionRequested) {
+                                if (remoteScheduledDeletionAt > System.currentTimeMillis()) {
+                                    // Auto-Cancellation if logging in before expiration
+                                    repository.cancelAccountDeletion()
+                                    effectiveDeletionRequested = false
+                                    effectiveScheduledDeletionAt = 0L
+
+                                    // Persistent one-time notification per deletion cycle
+                                    if (remoteScheduledDeletionAt != preferencesManager.getLastNotifiedDeletionTimestamp()) {
+                                        shouldNotifyCancellation = true
+                                        preferencesManager.setLastNotifiedDeletionTimestamp(remoteScheduledDeletionAt)
+                                    }
+                                } else {
+                                    // DELETION EXPIRED - Force sign out and local clear
+                                    logout()
+                                    return@withTimeoutOrNull
+                                }
+                            }
+
+                            // 1.5 Check if local DB is empty
                             val currentUserSnapshot = repository.user.first()
                             if (currentUserSnapshot == null || (currentUserSnapshot.totalXpEarned == 0 && currentUserSnapshot.totalWorkouts == 0)) {
                                 val remoteJson = doc.getString("backup_json")
@@ -303,6 +363,13 @@ class HomeViewModel(
 
                             // 3. FORCE OVERWRITE STALE JSON DATA WITH LIVE ROOT FIELDS
                             val userAfterRestore = repository.user.first() ?: User()
+                            
+                            val finalPhotoUrl = if (doc.contains("photoUrl")) {
+                                remotePhotoUrl
+                            } else {
+                                userAfterRestore.photoUrl
+                            }
+
                             repository.updateUser(userAfterRestore.copy(
                                 totalXpEarned = remoteXp,
                                 xp = XpCalculator.calculateCurrentLevelXp(remoteXp, remoteLevel),
@@ -310,28 +377,31 @@ class HomeViewModel(
                                 streak = remoteStreak,
                                 lastQuestRefreshDate = remoteLastRefresh,
                                 lastQuestCompletedDate = remoteLastQuestCompletedDate,
-                                photoUrl = remotePhotoUrl ?: userAfterRestore.photoUrl,
+                                photoUrl = finalPhotoUrl,
                                 guildId = remoteGuildId ?: userAfterRestore.guildId,
                                 guildName = remoteGuildName ?: userAfterRestore.guildName,
-                                guildTag = remoteGuildTag ?: userAfterRestore.guildTag
+                                guildTag = remoteGuildTag ?: userAfterRestore.guildTag,
+                                deletionRequested = effectiveDeletionRequested,
+                                scheduledDeletionAt = effectiveScheduledDeletionAt
                             ))
                             
-                            // Update in-memory avatar state if found
-                            if (remotePhotoUrl != null) {
-                                _avatarUri.value = remotePhotoUrl
+                            // Update in-memory avatar state if field exists (authoritative)
+                            if (doc.contains("photoUrl")) {
+                                _avatarUri.value = finalPhotoUrl
+                                preferencesManager.setAvatarUri(finalPhotoUrl)
                             }
 
                             // 4. Pull live quests if they are for today
                             val dailyQuestsMap = doc.get("dailyQuests") as? Map<String, Any>
-                            if (dailyQuestsMap != null && !shouldRefreshQuests(remoteLastRefresh, System.currentTimeMillis())) {
-                                val remoteQuests = dailyQuestsMap.values.mapNotNull { 
+                            if (dailyQuestsMap != null) {
+                                val remoteQuests = dailyQuestsMap.values.mapNotNull {
                                     val q = it as? Map<String, Any> ?: return@mapNotNull null
                                     DailyQuest(
-                                        id = (q["id"] as? Long)?.toInt() ?: 1,
+                                        id = (q["id"] as? Number)?.toInt() ?: 1,
                                         title = q["title"] as? String ?: "QUEST",
-                                        currentProgress = (q["currentProgress"] as? Long)?.toInt() ?: 0,
-                                        targetValue = (q["targetValue"] as? Long)?.toInt() ?: 20,
-                                        xpReward = (q["xpReward"] as? Long)?.toInt() ?: 50,
+                                        currentProgress = (q["currentProgress"] as? Number)?.toInt() ?: 0,
+                                        targetValue = (q["targetValue"] as? Number)?.toInt() ?: 20,
+                                        xpReward = (q["xpReward"] as? Number)?.toInt() ?: 50,
                                         isCompleted = q["isCompleted"] as? Boolean ?: false
                                     )
                                 }
@@ -374,7 +444,7 @@ class HomeViewModel(
                             if (initResult.isSuccess) {
                                 // After successful creation, hydrate local DB to avoid race conditions
                                 repository.insertUser(User(id = 0, level = 1, xp = 0, streak = 0, rank = "E-Rank Hunter"))
-                                
+
                                 // After successful creation, start listening
                                 startRealTimeUserListener(firebaseUser.uid)
                             } else {
@@ -388,7 +458,7 @@ class HomeViewModel(
                         if (_username.value == null) {
                             queueDialog(DialogType.USERNAME_SETUP)
                         }
-                        
+
                         checkPenalty()
                         checkAndRefreshQuests()
                     }
@@ -396,6 +466,9 @@ class HomeViewModel(
                     android.util.Log.e("SYNC_ERROR", "Critical error during sync", e)
                 } finally {
                     _isSyncing.value = false
+                    if (shouldNotifyCancellation) {
+                        _uiEvent.emit(UiEvent.DeletionCancelled)
+                    }
                 }
             } else {
                 checkPenalty()
@@ -441,12 +514,11 @@ class HomeViewModel(
                                 lastQuestCompletedDate = remoteLastQuestDate,
                                 level = remoteLevel,
                                 rank = remoteRank,
-                                photoUrl = remotePhotoUrl ?: currentUser.photoUrl
+                                photoUrl = remotePhotoUrl
                             ))
                             
-                            if (remotePhotoUrl != null) {
-                                _avatarUri.value = remotePhotoUrl
-                            }
+                            _avatarUri.value = remotePhotoUrl
+                            preferencesManager.setAvatarUri(remotePhotoUrl)
                         }
                     }
                 }
@@ -520,39 +592,41 @@ class HomeViewModel(
     }
 
     private suspend fun checkAndRefreshQuests() {
-        val currentUser = try {
-            withTimeout(3000L) {
-                repository.user.filterNotNull().first()
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("EXORK_QUEST", "Timed out waiting for local user during quest refresh", e)
-            return
-        }
+        val currentUser = repository.user.first() ?: User()
         val now = System.currentTimeMillis()
         val todayDateString = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
-        // Fix: Bulletproof Suppression
+        // 0. Skip if already completed today to prevent duplicate regeneration
         if (currentUser.lastQuestCompletedDate == todayDateString) {
-            android.util.Log.d("EXORK_QUEST", "Suppressed Quest Popup: Already completed today ($todayDateString)")
+            android.util.Log.d("EXORK_QUEST", "Quests already completed for today. Skipping regeneration.")
             return
         }
-        
-        if (shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)) {
+
+        // Fetch local quests to detect if they are physically missing
+        val currentQuests = repository.allDailyQuests.first()
+        val isNewDay = shouldRefreshQuests(currentUser.lastQuestRefreshDate, now)
+        val areQuestsMissing = currentQuests.isEmpty()
+
+        if (isNewDay || areQuestsMissing) {
             val newQuests = listOf(
                 DailyQuest(id = 1, title = "PUSH-UPS", targetValue = (15..30).random(), xpReward = 50),
                 DailyQuest(id = 2, title = "PULL-UPS", targetValue = (10..15).random(), xpReward = 50),
                 DailyQuest(id = 3, title = "PLANK", targetValue = (60..90).random(), xpReward = 50)
             )
             repository.clearDailyQuests()
-            repository.insertDailyQuests(newQuests)
-            repository.updateUser(currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0))
-            notifyWidget()
             
-            if (!preferencesManager.hasAcceptedQualifications()) {
-                queueDialog(DialogType.WELCOME)
+            // 1. Update user refresh timestamp BEFORE quests to ensure Firestore sync (triggered by insertDailyQuests)
+            // has the correct root-field metadata.
+            val updatedUser = if (isNewDay) {
+                currentUser.copy(lastQuestRefreshDate = now, customXpEarnedToday = 0)
             } else {
-                queueDialog(DialogType.QUEST_INFO)
+                currentUser.copy(lastQuestRefreshDate = now)
             }
+            repository.updateUser(updatedUser)
+            
+            // 2. Insert quests and sync to cloud
+            repository.insertDailyQuests(newQuests)
+            notifyWidget()
         }
     }
 
@@ -641,13 +715,16 @@ class HomeViewModel(
         viewModelScope.launch {
             val quests = dailyQuests.value
             if (quests.isNotEmpty() && quests.all { it.currentProgress >= it.targetValue && !it.isCompleted }) {
-                // Mark all as completed locally
-                quests.forEach { quest ->
-                    repository.updateDailyQuest(quest.copy(isCompleted = true))
+                // Perform Reward Processing on IO thread
+                withContext(Dispatchers.IO) {
+                    // Mark all as completed locally
+                    quests.forEach { quest ->
+                        repository.updateDailyQuest(quest.copy(isCompleted = true))
+                    }
+                    
+                    // Grant XP and sync to Firestore root fields immediately
+                    repository.recordProgress(xpGained = 50, isQuestCompletion = true)
                 }
-                
-                // Grant XP and sync to Firestore root fields immediately
-                repository.recordProgress(xpGained = 50, isQuestCompletion = true)
                 
                 _uiEvent.emit(UiEvent.XpGained(50))
                 notifyWidget()
@@ -664,22 +741,8 @@ class HomeViewModel(
                 try {
                     WorkManager.getInstance(context).cancelUniqueWork("DAILY_QUEST_REMINDER")
                     WorkManager.getInstance(context).cancelAllWorkByTag("DAILY_QUEST_REMINDER_TAG")
-                    
-                    // COMPLETELY REMOVE / CANCEL LEGACY ALARMMANAGER
-                    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                    val intent = Intent(context, com.exork.app.receiver.NotificationReceiver::class.java)
-                    val pendingIntent = PendingIntent.getBroadcast(
-                        context, 
-                        700, // Legacy Request Code
-                        intent, 
-                        PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    if (pendingIntent != null) {
-                        alarmManager?.cancel(pendingIntent)
-                        pendingIntent.cancel()
-                    }
                 } catch (e: Exception) {
-                    android.util.Log.e("EXORK_QUEST", "Failed to cancel work or alarm", e)
+                    android.util.Log.e("EXORK_QUEST", "Failed to cancel work", e)
                 }
 
                 // Final full sync to ensure backup_json captures completion

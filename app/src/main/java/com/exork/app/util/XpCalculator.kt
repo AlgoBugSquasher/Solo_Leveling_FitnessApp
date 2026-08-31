@@ -33,8 +33,8 @@ object XpCalculator {
                 (distance * 5).toInt()
             }
         }
-        // Clamp maximum XP per standard set/exercise to a sane range to prevent formula overflow
-        return rawXp.coerceIn(0, 100)
+        // Ensure every valid logged exercise generates a reasonable XP reward (minimum fallback of 10 XP)
+        return rawXp.coerceIn(10, 100)
     }
 
     fun calculateWorkoutXp(exercises: List<Exercise>, streak: Int): Int {

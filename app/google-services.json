@@ -22,6 +22,22 @@
           }
         },
         {
+          "client_id": "669660018714-q4vdutpn33gh8upqf4c97ns61b91gfaf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exork.app",
+            "certificate_hash": "fe8610a41ad409d0ac5b6e6b04bcd9800cb6c040"
+          }
+        },
+        {
+          "client_id": "669660018714-ug3621hgll5i0se0gds2md8pdlsbuh9h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.exork.app",
+            "certificate_hash": "92caf3480b47c68d7bae612f14e9526b5720a383"
+          }
+        },
+        {
           "client_id": "669660018714-r3hvjc1kkgpf20495h26kfi81aptdtbv.apps.googleusercontent.com",
           "client_type": 3
         }

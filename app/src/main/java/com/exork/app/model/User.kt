@@ -42,7 +42,11 @@ data class User(
     val photoUrl: String? = null,
     val guildId: String? = null,
     val guildName: String? = null,
-    val guildTag: String? = null
+    val guildTag: String? = null,
+    // Deletion Scheduling
+    val deletionRequested: Boolean = false,
+    val deletionRequestedAt: Long? = null,
+    val scheduledDeletionAt: Long? = null
 ) {
     fun xpToNextLevel(): Int = XpCalculator.calculateRequiredXP(level)
 

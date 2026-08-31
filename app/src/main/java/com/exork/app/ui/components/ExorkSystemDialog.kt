@@ -57,7 +57,7 @@ fun ExorkSystemDialog(
 
     LaunchedEffect(Unit) {
         animationStarted = true
-        soundManager.playSystemPopupSound()
+        soundManager.playAlert()
     }
 
     Dialog(

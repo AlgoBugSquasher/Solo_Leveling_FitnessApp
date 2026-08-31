@@ -34,6 +34,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.exork.app.ui.theme.ExorkTheme
 import com.exork.app.ui.theme.MonarchSlate
+import com.exork.app.util.ReviewHelper
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.UpdateAvailability
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.InstallStatus
 import kotlinx.coroutines.launch
 import coil.imageLoader
 
@@ -50,8 +57,20 @@ data class SystemNotification(
 )
 
 class MainActivity : ComponentActivity() {
+    private lateinit var appUpdateManager: AppUpdateManager
+    private val updateRequestCode = 123
+    
+    private val installStateUpdatedListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            // Flexible update downloaded, prompt user to restart (Not implemented here for simplicity)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        appUpdateManager = AppUpdateManagerFactory.create(this)
+        checkPlayStoreUpdate()
         
         // Link hardware volume buttons to the media stream
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
@@ -106,7 +125,37 @@ class MainActivity : ComponentActivity() {
             }
             
             ExorkTheme {
-                val navController = rememberNavController()
+            var showForceUpdateDialog by remember { mutableStateOf(false) }
+            
+            LaunchedEffect(Unit) {
+                val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                db.collection("system").document("config").get()
+                    .addOnSuccessListener { doc ->
+                        val minVersion = doc.getLong("min_version") ?: 0L
+                        if (BuildConfig.VERSION_CODE < minVersion.toInt()) {
+                            showForceUpdateDialog = true
+                        }
+                    }
+            }
+
+            if (showForceUpdateDialog) {
+                ExorkSystemDialog(
+                    title = "SYSTEM UPDATE REQUIRED",
+                    content = "A critical system update is mandatory to continue your journey. Please update to the latest version via the Play Store.",
+                    primaryButtonText = "UPDATE NOW",
+                    onPrimaryClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$packageName"))
+                            startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
+                            startActivity(intent)
+                        }
+                    }
+                )
+            }
+            
+            val navController = rememberNavController()
                 
                 // Shared Activity-scoped HomeViewModel
                 val homeViewModel: HomeViewModel = viewModel(factory = viewModelFactory)
@@ -211,6 +260,18 @@ class MainActivity : ComponentActivity() {
                                     }
                                     launchSingleTop = true
                                 }
+                            }
+                            is UiEvent.DeletionCancelled -> {
+                                notificationQueue.add(SystemNotification(
+                                    title = "🛡️ DELETION CANCELLED",
+                                    content = "Welcome back, Hunter.\nYour account deletion request has been cancelled and your profile remains active.",
+                                    primaryText = "OK",
+                                    secondaryText = null,
+                                    onPrimary = { notificationQueue.removeAt(0) }
+                                ))
+                            }
+                            is UiEvent.RequestReview -> {
+                                ReviewHelper.launchReviewFlow(this@MainActivity)
                             }
                             else -> {}
                         }
@@ -426,8 +487,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("settings") {
+                            val authViewModel = ViewModelProvider(this@MainActivity, viewModelFactory)[AuthViewModel::class.java]
                             SettingsScreen(
                                 viewModel = homeViewModel,
+                                authViewModel = authViewModel,
                                 onViewAbout = { safeNavigate("about") },
                                 onLogout = { homeViewModel.logout() },
                                 onNavigateBack = { safePop() }
@@ -485,6 +548,69 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        
+        // Handle immediate updates that are already in progress
+        if (::appUpdateManager.isInitialized) {
+            appUpdateManager.appUpdateInfo.addOnSuccessListener { appUpdateInfo ->
+                if (appUpdateInfo.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
+                    try {
+                        appUpdateManager.startUpdateFlowForResult(
+                            appUpdateInfo,
+                            AppUpdateType.IMMEDIATE,
+                            this,
+                            updateRequestCode
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppUpdate", "Resume flow failed", e)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun checkPlayStoreUpdate() {
+        val appUpdateInfoTask = appUpdateManager.appUpdateInfo
+        appUpdateInfoTask.addOnSuccessListener { appUpdateInfo ->
+            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE) {
+                if (appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+                    try {
+                        appUpdateManager.startUpdateFlowForResult(
+                            appUpdateInfo,
+                            AppUpdateType.IMMEDIATE,
+                            this,
+                            updateRequestCode
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppUpdate", "Immediate flow failed", e)
+                    }
+                } else if (appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
+                    appUpdateManager.registerListener(installStateUpdatedListener)
+                    try {
+                        appUpdateManager.startUpdateFlowForResult(
+                            appUpdateInfo,
+                            AppUpdateType.FLEXIBLE,
+                            this,
+                            updateRequestCode
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("AppUpdate", "Flexible flow failed", e)
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::appUpdateManager.isInitialized) {
+            try {
+                appUpdateManager.unregisterListener(installStateUpdatedListener)
+            } catch (e: Exception) {}
         }
     }
 }

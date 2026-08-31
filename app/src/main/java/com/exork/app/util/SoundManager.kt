@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.SoundPool
 import android.util.Log
 import com.exork.app.R
+import com.exork.app.data.PreferencesManager
 import com.exork.app.model.BadgeRarity
 
 class SoundManager private constructor(context: Context) {
@@ -14,6 +15,7 @@ class SoundManager private constructor(context: Context) {
     private val loadedSounds = mutableSetOf<Int>()
     private var isEnabled = true
     private val context: Context = context.applicationContext
+    private val preferencesManager = PreferencesManager(context)
 
     init {
         val audioAttributes = AudioAttributes.Builder()
@@ -64,25 +66,27 @@ class SoundManager private constructor(context: Context) {
         isEnabled = enabled
     }
 
-    private fun play(key: String) {
+    private fun play(key: String, volume: Float? = null) {
         if (!isEnabled) return
         val id = sounds[key]
         if (id != null) {
+            val finalVolume = volume ?: preferencesManager.getSfxVolume()
             if (loadedSounds.contains(id)) {
-                soundPool.play(id, 1f, 1f, 1, 0, 1f)
+                soundPool.play(id, finalVolume, finalVolume, 1, 0, 1f)
             } else {
                 Log.w("SoundManager", "Sound not loaded yet: $key. Falling back to MediaPlayer.")
-                playFallback(key)
+                playFallback(key, finalVolume)
             }
         } else {
             Log.w("SoundManager", "Sound key not found: $key")
         }
     }
 
-    private fun playFallback(key: String) {
+    private fun playFallback(key: String, volume: Float) {
         val resId = rawResIds[key] ?: return
         try {
             android.media.MediaPlayer.create(context, resId).apply {
+                setVolume(volume, volume)
                 setOnCompletionListener { release() }
                 start()
             }
@@ -107,9 +111,10 @@ class SoundManager private constructor(context: Context) {
         }
     }
 
-    fun playSystemPopupSound() = play("system_popup")
+    fun playSystemPopupSound() = play("system_popup", preferencesManager.getVoiceVolume())
     fun playSystemAcceptSound() = play("system_accept")
     fun playSystemDeclineSound() = play("system_decline")
+    fun playAlert() = play("system_popup", preferencesManager.getVoiceVolume())
 
     companion object {
         @Volatile

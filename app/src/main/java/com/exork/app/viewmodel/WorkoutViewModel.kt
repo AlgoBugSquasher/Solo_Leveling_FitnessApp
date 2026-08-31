@@ -57,67 +57,83 @@ class WorkoutViewModel(private val repository: FitnessRepository) : ViewModel() 
         viewModelScope.launch {
             _isUploading.value = true
             try {
-                val currentUser = repository.user.first() ?: return@launch
+                // Perform calculations and Room insertions on IO thread to prevent UI stutter
+                val calculatedXp = withContext(Dispatchers.IO) {
+                    val currentUser = repository.user.first() ?: return@withContext 0
 
-                // 1. Calculate XP from pending exercises
-                val calculatedXp = XpCalculator.calculateWorkoutXp(currentPending, currentUser.streak)
-                
-                // 2. Insert Workout & Exercises into Room and update stats
-                val workout = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = calculatedXp)
-                val exerciseEntities = currentPending.map { 
-                    ExerciseEntity(
-                        workoutId = 0,
-                        name = it.name,
-                        category = it.category,
-                        trackingType = it.trackingType,
-                        reps = it.reps,
-                        sets = it.sets,
-                        duration = it.duration,
-                        distanceKm = it.distanceKm
-                    )
-                }
-                
-                // Track total stats for this workout
-                var addedPushups = 0
-                var addedPullups = 0
-                var addedPlankTime = 0
-                var addedDistance = 0.0
-
-                currentPending.forEach { ex ->
-                    when (ex.category) {
-                        ExerciseCategory.PUSHUPS -> addedPushups += (ex.reps ?: 0) * ex.sets
-                        ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
-                        ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
-                        ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
-                        ExerciseCategory.OTHER -> {}
+                    // 1. Calculate XP from pending exercises
+                    val calculatedXp = XpCalculator.calculateWorkoutXp(currentPending, currentUser.streak)
+                    
+                    // 2. Prepare entities
+                    val workout = WorkoutEntity(date = System.currentTimeMillis(), totalXpGained = calculatedXp)
+                    val exerciseEntities = currentPending.map { 
+                        ExerciseEntity(
+                            workoutId = 0,
+                            name = it.name,
+                            category = it.category,
+                            trackingType = it.trackingType,
+                            reps = it.reps,
+                            sets = it.sets,
+                            duration = it.duration,
+                            distanceKm = it.distanceKm
+                        )
                     }
+                    
+                    // Track total stats for this workout
+                    var addedPushups = 0
+                    var addedPullups = 0
+                    var addedPlankTime = 0
+                    var addedDistance = 0.0
+
+                    currentPending.forEach { ex ->
+                        when (ex.category) {
+                            ExerciseCategory.PUSHUPS -> addedPushups += (ex.reps ?: 0) * ex.sets
+                            ExerciseCategory.PULLUPS -> addedPullups += (ex.reps ?: 0) * ex.sets
+                            ExerciseCategory.PLANK -> addedPlankTime += (ex.duration ?: 0) * ex.sets
+                            ExerciseCategory.CARDIO -> addedDistance += (ex.distanceKm ?: 0.0)
+                            ExerciseCategory.OTHER -> {}
+                        }
+                    }
+
+                    // 3. ATOMIC LOCAL SAVE: Room must always finish first
+                    repository.insertWorkout(workout, exerciseEntities)
+                    repository.recordProgress(
+                        pushups = addedPushups,
+                        pullups = addedPullups,
+                        plankSeconds = addedPlankTime,
+                        distanceKm = addedDistance,
+                        xpGained = calculatedXp,
+                        isWorkout = true
+                    )
+                    
+                    calculatedXp
                 }
 
-                repository.insertWorkout(workout, exerciseEntities)
-                repository.recordProgress(
-                    pushups = addedPushups,
-                    pullups = addedPullups,
-                    plankSeconds = addedPlankTime,
-                    distanceKm = addedDistance,
-                    xpGained = calculatedXp,
-                    isWorkout = true
-                )
+                if (calculatedXp == 0) {
+                    _isUploading.value = false
+                    return@launch
+                }
 
-                // 3. Emit XP Gained UI Event for Animation & Sound
+                // 4. Emit XP Gained UI Event for Animation & Sound
                 _uiEvent.emit(UiEvent.XpGained(calculatedXp))
 
-                // 4. CRITICAL: Clear Pending Data
+                // 5. CRITICAL: Clear Pending Data
                 _pendingExercises.value = emptyList()
 
-                // 5. Trigger sync & Navigate Back
-                val updatedUser = repository.user.first()
-                if (updatedUser != null) {
-                    repository.syncToFirestore(updatedUser)
+                // 6. FIRE AND FORGET CLOUD SYNC: Do not block completion by network latency
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        val updatedUser = repository.user.first()
+                        if (updatedUser != null) {
+                            repository.syncToFirestore(updatedUser)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("WORKOUT_LOG", "Background cloud sync failed", e)
+                    }
                 }
                 
+                // 7. Callback to UI (Main Thread)
                 withContext(Dispatchers.Main) {
-                    // Pass the full calculated XP for the UI animation feedback, 
-                    // even if the repository correctly caps the actual balance update.
                     onComplete(calculatedXp)
                 }
             } catch (e: Exception) {

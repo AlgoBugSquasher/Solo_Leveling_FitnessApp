@@ -114,7 +114,17 @@ fun NativeAvatarCropper(
                                 .clickable {
                                     try {
                                         val inputStream = context.contentResolver.openInputStream(imageUri)
-                                        val original = BitmapFactory.decodeStream(inputStream)
+                                        val originalRaw = BitmapFactory.decodeStream(inputStream)
+                                        
+                                        // Handle EXIF orientation
+                                        val orientation = context.contentResolver.openInputStream(imageUri)?.use { stream ->
+                                            android.media.ExifInterface(stream).getAttributeInt(
+                                                android.media.ExifInterface.TAG_ORIENTATION,
+                                                android.media.ExifInterface.ORIENTATION_UNDEFINED
+                                            )
+                                        } ?: android.media.ExifInterface.ORIENTATION_UNDEFINED
+                                        
+                                        val original = com.exork.app.ui.theme.rotateBitmap(originalRaw, orientation)
                                         
                                         val targetDim = 512
                                         val result = Bitmap.createBitmap(targetDim, targetDim, Bitmap.Config.ARGB_8888)

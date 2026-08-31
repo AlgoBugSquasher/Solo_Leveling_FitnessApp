@@ -50,12 +50,21 @@ class LeaderboardViewModel : ViewModel() {
 
                 if (snapshot != null) {
                     val hunters = snapshot.documents.mapNotNull { doc ->
-                        val profile = doc.toObject(HunterProfile::class.java)
-                        profile?.copy(
+                        val profile = doc.toObject(HunterProfile::class.java) ?: HunterProfile()
+                        val photo = doc.getString("photoUrl") 
+                            ?: doc.getString("profilePicture") 
+                            ?: doc.getString("avatarUrl") 
+                            ?: doc.getString("photo_url") 
+                            ?: profile.photoUrl
+                        
+                        android.util.Log.d("LeaderboardAvatar", "User: ${doc.getString("username")}, photoUrl: $photo")
+                        
+                        profile.copy(
                             userId = doc.id,
                             hunterLevel = doc.getLong("hunterLevel")?.toInt() ?: profile.hunterLevel,
                             totalXp = doc.getLong("totalXp")?.toInt() ?: profile.totalXp,
-                            hunterRank = doc.getString("hunterRank") ?: profile.hunterRank
+                            hunterRank = doc.getString("hunterRank") ?: profile.hunterRank,
+                            photoUrl = photo
                         )
                     }
                     android.util.Log.d("LeaderboardDebug", "Fetched users count: ${hunters.size}")
@@ -71,11 +80,18 @@ class LeaderboardViewModel : ViewModel() {
                         viewModelScope.launch {
                             try {
                                 val userDoc = db.collection("users").document(currentUserId).get().await()
-                                val profile = userDoc.toObject(HunterProfile::class.java)
-                                val finalProfile = profile?.copy(
+                                val profile = userDoc.toObject(HunterProfile::class.java) ?: HunterProfile()
+                                val photo = userDoc.getString("photoUrl") 
+                                    ?: userDoc.getString("profilePicture") 
+                                    ?: userDoc.getString("avatarUrl") 
+                                    ?: userDoc.getString("photo_url") 
+                                    ?: profile.photoUrl
+                                    
+                                val finalProfile = profile.copy(
                                     userId = userDoc.id,
                                     hunterLevel = userDoc.getLong("hunterLevel")?.toInt() ?: profile.hunterLevel,
-                                    totalXp = userDoc.getLong("totalXp")?.toInt() ?: profile.totalXp
+                                    totalXp = userDoc.getLong("totalXp")?.toInt() ?: profile.totalXp,
+                                    photoUrl = photo
                                 )
                                 _currentUserProfile.value = finalProfile
                                 

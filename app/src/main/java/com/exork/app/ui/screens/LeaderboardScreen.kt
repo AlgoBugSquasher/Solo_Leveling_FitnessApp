@@ -1,7 +1,11 @@
 package com.exork.app.ui.screens
 
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -19,9 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.exork.app.model.HunterProfile
@@ -178,7 +185,7 @@ fun PodiumMemberCard(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.width(if (isTop) 130.dp else 95.dp)
+        modifier = modifier.width(if (isTop) 140.dp else 105.dp)
     ) {
         Box(contentAlignment = Alignment.TopCenter) {
             // Crown Icon for #1
@@ -186,7 +193,7 @@ fun PodiumMemberCard(
                 Text(
                     text = "👑",
                     fontSize = 38.sp,
-                    modifier = Modifier.offset(y = (-38).dp)
+                    modifier = Modifier.offset(y = (-44).dp)
                 )
             }
 
@@ -194,7 +201,7 @@ fun PodiumMemberCard(
             if (isTop && (hunter.totalXp > 0 || hunter.username != null)) {
                 Box(
                     modifier = Modifier
-                        .size(105.dp)
+                        .size(125.dp)
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(accentColor.copy(alpha = 0.4f), Color.Transparent)
@@ -206,36 +213,25 @@ fun PodiumMemberCard(
 
             // Neumorphic Avatar Frame
             ExorkNeumorphicCard(
-                modifier = Modifier.size(if (isTop) 95.dp else 75.dp),
+                modifier = Modifier.size(if (isTop) 110.dp else 88.dp),
                 cornerRadius = 100.dp,
                 borderColor = accentColor,
                 elevation = if (isTop) 22.dp else 8.dp,
                 containerColor = ObsidianVoid
             ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (isTop && hunter.totalXp > 0) {
-                        Icon(
-                            imageVector = Icons.Default.MilitaryTech,
-                            contentDescription = "Emblem",
-                            tint = accentColor.copy(alpha = 0.8f),
-                            modifier = Modifier.fillMaxSize(0.6f)
-                        )
-                    } else {
-                        Text(
-                            text = (hunter.username ?: hunter.displayName).take(1).uppercase(),
-                            style = if (isTop) ExorkTypography.headlineLarge else ExorkTypography.headlineMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-                }
+                HunterAvatar(
+                    photoUrl = hunter.photoUrl,
+                    name = hunter.username ?: hunter.displayName,
+                    size = if (isTop) 110.dp else 88.dp,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             // Rank Badge Overlay
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = 14.dp),
+                    .offset(y = 10.dp),
                 color = accentColor,
                 shape = CircleShape,
                 shadowElevation = 10.dp
@@ -283,12 +279,12 @@ fun PodiumMemberCard(
 fun PlaceholderPodiumCard(text: String, rank: Int, color: Color) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(95.dp)
+        modifier = Modifier.width(105.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
-                    .size(75.dp)
+                    .size(88.dp)
                     .border(1.5.dp, color.copy(alpha = 0.3f), CircleShape)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.03f)),
@@ -305,7 +301,7 @@ fun PlaceholderPodiumCard(text: String, rank: Int, color: Color) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = 12.dp),
+                    .offset(y = 10.dp),
                 color = color.copy(alpha = 0.3f),
                 shape = CircleShape
             ) {
@@ -350,24 +346,12 @@ fun LeaderboardRowItem(hunter: HunterProfile, rank: Int, isCurrentUser: Boolean)
             )
 
             // Mini Avatar
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(ObsidianVoid)
-                    .border(1.5.dp, ChromeSilver.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (hunter.totalXp > 0 || hunter.username != null) {
-                    Text(
-                        text = (hunter.username ?: hunter.displayName).take(1).uppercase(),
-                        style = ExorkTypography.labelLarge,
-                        color = Color.White
-                    )
-                } else {
-                    Icon(Icons.Default.Person, null, tint = TitaniumGray.copy(alpha = 0.4f), modifier = Modifier.size(22.dp))
-                }
-            }
+            HunterAvatar(
+                photoUrl = hunter.photoUrl,
+                name = hunter.username ?: hunter.displayName,
+                size = 44.dp,
+                modifier = Modifier.border(1.5.dp, ChromeSilver.copy(alpha = 0.2f), CircleShape)
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -461,6 +445,72 @@ fun PinnedStandingCard(profile: HunterProfile, rank: Int) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun HunterAvatar(
+    photoUrl: String?,
+    name: String,
+    size: Dp,
+    modifier: Modifier = Modifier
+) {
+    val initial = name.trim().take(1).uppercase().ifEmpty { "H" }
+
+    // Decode Base64 string to Bitmap in memory if it is a Data URI
+    val base64Bitmap = remember(photoUrl) {
+        if (!photoUrl.isNullOrBlank() && photoUrl.startsWith("data:image")) {
+            try {
+                val pureBase64 = photoUrl.substringAfter("base64,")
+                val decodedBytes = Base64.decode(pureBase64, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)?.asImageBitmap()
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(ObsidianVoid),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            // 1. Decoded Base64 Bitmap
+            base64Bitmap != null -> {
+                Image(
+                    bitmap = base64Bitmap,
+                    contentDescription = "Hunter Avatar",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            }
+            // 2. Standard Web URL (HTTP/HTTPS)
+            !photoUrl.isNullOrBlank() && (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) -> {
+                coil.compose.AsyncImage(
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data(photoUrl)
+                        .crossfade(true)
+                        .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                        .build(),
+                    contentDescription = "Hunter Avatar",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            }
+            // 3. Fallback Initial Letter
+            else -> {
+                Text(
+                    text = initial,
+                    style = if (size > 60.dp) ExorkTypography.headlineMedium else ExorkTypography.labelLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

@@ -1,7 +1,6 @@
 package com.exork.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,8 +19,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.exork.app.model.HunterProfile
+import com.exork.app.ui.components.AvatarImage
 import com.exork.app.ui.theme.*
 
 @Composable
@@ -92,17 +90,10 @@ fun HunterProfileInspectDialog(
                         .background(Color.Black),
                     contentAlignment = Alignment.Center
                 ) {
-                    val bitmap = remember(profile.photoUrl) { parseAvatarToBitmap(profile.photoUrl) }
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(Icons.Default.Person, null, tint = ChromeSilver, modifier = Modifier.size(40.dp))
-                    }
+                    AvatarImage(
+                        avatarData = profile.photoUrl,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
 
                 // Identity

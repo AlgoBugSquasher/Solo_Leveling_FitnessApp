@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.exork.app.model.HunterProfile
+import com.exork.app.ui.components.AvatarImage
 import com.exork.app.ui.components.HunterProfileInspectDialog
 import com.exork.app.ui.theme.*
 import com.exork.app.viewmodel.HunterNetworkViewModel
@@ -57,6 +58,7 @@ fun HunterNetworkScreen(
     val sentRequestIds by viewModel.sentRequestIds.collectAsState()
     val incomingRequests by viewModel.incomingRequests.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val suggestedHunters by viewModel.suggestedHunters.collectAsState()
     val incomingManaCount by viewModel.incomingManaCount.collectAsState()
 
     val tabs = listOf("FIND HUNTERS", "MY ALLIES")
@@ -305,22 +307,54 @@ fun HunterNetworkScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(searchResults) { hunter ->
-                                val isAlly = allies.any { it.userId == hunter.userId }
-                                val isRequested = sentRequestIds.contains(hunter.userId)
+                            if (searchQuery.isBlank()) {
+                                item {
+                                    Text(
+                                        "ACTIVE HUNTERS IN REALM",
+                                        style = ExorkTypography.labelMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp),
+                                        color = TitaniumGray,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
                                 
-                                HunterResultCard(
-                                    hunter = hunter,
-                                    isAlly = isAlly,
-                                    isRequested = isRequested,
-                                    onClick = {
-                                        selectedHunter = hunter
-                                        showInspectDialog = true
-                                    },
-                                    onSendMana = { viewModel.sendMana(hunter) }
-                                ) {
-                                    if (!isAlly && !isRequested) {
-                                        viewModel.sendAllyRequest(hunter)
+                                val huntersToShow = if (suggestedHunters.isEmpty() && isSearching) emptyList() else suggestedHunters
+                                items(huntersToShow) { hunter ->
+                                    val isAlly = allies.any { it.userId == hunter.userId }
+                                    val isRequested = sentRequestIds.contains(hunter.userId)
+                                    
+                                    HunterResultCard(
+                                        hunter = hunter,
+                                        isAlly = isAlly,
+                                        isRequested = isRequested,
+                                        onClick = {
+                                            selectedHunter = hunter
+                                            showInspectDialog = true
+                                        },
+                                        onSendMana = { viewModel.sendMana(hunter) }
+                                    ) {
+                                        if (!isAlly && !isRequested) {
+                                            viewModel.sendAllyRequest(hunter)
+                                        }
+                                    }
+                                }
+                            } else {
+                                items(searchResults) { hunter ->
+                                    val isAlly = allies.any { it.userId == hunter.userId }
+                                    val isRequested = sentRequestIds.contains(hunter.userId)
+                                    
+                                    HunterResultCard(
+                                        hunter = hunter,
+                                        isAlly = isAlly,
+                                        isRequested = isRequested,
+                                        onClick = {
+                                            selectedHunter = hunter
+                                            showInspectDialog = true
+                                        },
+                                        onSendMana = { viewModel.sendMana(hunter) }
+                                    ) {
+                                        if (!isAlly && !isRequested) {
+                                            viewModel.sendAllyRequest(hunter)
+                                        }
                                     }
                                 }
                             }
@@ -518,10 +552,6 @@ fun HunterAvatar(hunter: HunterProfile, modifier: Modifier = Modifier) {
         if (hunter.userId == currentUserId) FirebaseAuth.getInstance().currentUser?.photoUrl?.toString() else null
     }
 
-    val hunterBitmap = remember(photoSource) {
-        parseAvatarToBitmap(photoSource)
-    }
-
     Box(
         modifier = modifier
             .clip(CircleShape)
@@ -529,33 +559,11 @@ fun HunterAvatar(hunter: HunterProfile, modifier: Modifier = Modifier) {
             .border(1.5.dp, ChromeSilver.copy(alpha = 0.4f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        if (hunterBitmap != null) {
-            Image(
-                bitmap = hunterBitmap.asImageBitmap(),
-                contentDescription = "Hunter Profile Avatar",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else if (photoSource != null && photoSource.startsWith("http")) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(photoSource)
-                    .crossfade(true)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .build(),
-                contentDescription = "Hunter Profile Avatar",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = TitaniumGray.copy(alpha = 0.6f),
-                modifier = Modifier.fillMaxSize(0.6f)
-            )
-        }
+        AvatarImage(
+            avatarData = photoSource,
+            modifier = Modifier.fillMaxSize(),
+            placeholderSize = 32.dp
+        )
     }
 }
 
@@ -597,7 +605,7 @@ fun IncomingRequestCard(hunter: HunterProfile, onAccept: () -> Unit, onDecline: 
                     onClick = onAccept,
                     modifier = Modifier.size(36.dp).background(ElectricCyan, CircleShape)
                 ) {
-                    Icon(Icons.Default.Check, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Check, null, tint = MonarchSlate, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -665,7 +673,7 @@ fun HunterResultCard(
                 else -> {
                     Button(
                         onClick = onAdd,
-                        colors = ButtonDefaults.buttonColors(containerColor = ElectricCyan, contentColor = Color.Black),
+                        colors = ButtonDefaults.buttonColors(containerColor = ElectricCyan, contentColor = MonarchSlate),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) {

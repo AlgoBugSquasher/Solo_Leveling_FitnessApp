@@ -15,7 +15,7 @@ import com.exork.app.model.*
         TrainingDay::class, WeeklyBonusEntity::class, PlannedExercise::class, JourneyEvent::class,
         DailyQuest::class, Note::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -103,6 +103,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `user_table` ADD COLUMN `deletionRequested` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `user_table` ADD COLUMN `deletionRequestedAt` INTEGER")
+                db.execSQL("ALTER TABLE `user_table` ADD COLUMN `scheduledDeletionAt` INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -110,7 +118,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "fitness_database"
                 )
-                    .addMigrations(MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
+                    .addMigrations(MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28)
                     .build()
                 INSTANCE = instance
                 instance

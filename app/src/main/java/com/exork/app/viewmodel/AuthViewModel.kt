@@ -182,4 +182,27 @@ class AuthViewModel : ViewModel() {
         auth.signOut()
         _user.value = null
     }
+
+    suspend fun reauthenticate(password: String): Result<Unit> {
+        val user = auth.currentUser ?: return Result.failure(Exception("Not logged in"))
+        val email = user.email ?: return Result.failure(Exception("No email found"))
+        val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, password)
+        return try {
+            user.reauthenticate(credential).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun reauthenticateWithGoogle(idToken: String): Result<Unit> {
+        val user = auth.currentUser ?: return Result.failure(Exception("Not logged in"))
+        val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+        return try {
+            user.reauthenticate(credential).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

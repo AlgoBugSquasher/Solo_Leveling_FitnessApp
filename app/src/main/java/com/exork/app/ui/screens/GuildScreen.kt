@@ -33,11 +33,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import coil.compose.AsyncImage
 import com.exork.app.model.Guild
 import com.exork.app.model.GuildMember
+import com.exork.app.ui.components.AvatarImage
 import com.exork.app.ui.theme.*
-import com.exork.app.ui.theme.parseAvatarToBitmap
 import com.exork.app.viewmodel.GuildUiEvent
 import com.exork.app.viewmodel.GuildViewModel
 import kotlinx.coroutines.launch
@@ -498,9 +497,6 @@ fun MemberRosterTable(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Small Avatar
-                    val memberBitmap = remember(member.photoUrl) {
-                        parseAvatarToBitmap(member.photoUrl)
-                    }
                     Box(
                         modifier = Modifier
                             .size(36.dp)
@@ -509,21 +505,11 @@ fun MemberRosterTable(
                             .border(1.dp, if (isLeader) Color(0xFFFFD700) else ElectricCyan.copy(alpha = 0.4f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (memberBitmap != null) {
-                            androidx.compose.foundation.Image(
-                                bitmap = memberBitmap.asImageBitmap(),
-                                contentDescription = member.username,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = ChromeSilver,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        AvatarImage(
+                            avatarData = member.photoUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            placeholderSize = 20.dp
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))

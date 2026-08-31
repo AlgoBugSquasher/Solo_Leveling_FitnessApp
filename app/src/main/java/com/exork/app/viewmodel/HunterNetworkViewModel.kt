@@ -43,6 +43,9 @@ class HunterNetworkViewModel(private val repository: FitnessRepository) : ViewMo
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
+    private val _suggestedHunters = MutableStateFlow<List<HunterProfile>>(emptyList())
+    val suggestedHunters: StateFlow<List<HunterProfile>> = _suggestedHunters.asStateFlow()
+
     private val _incomingManaCount = MutableStateFlow(0)
     val incomingManaCount: StateFlow<Int> = _incomingManaCount.asStateFlow()
 
@@ -83,6 +86,40 @@ class HunterNetworkViewModel(private val repository: FitnessRepository) : ViewMo
         }
         
         startManaListener()
+        fetchSuggestedHunters()
+    }
+
+    private fun fetchSuggestedHunters() {
+        viewModelScope.launch {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            try {
+                val snapshot = db.collection("users")
+                    .orderBy("totalXp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(40)
+                    .get()
+                    .await()
+                
+                val hunters = snapshot.documents.mapNotNull { doc ->
+                    val profile = doc.toObject(HunterProfile::class.java) ?: HunterProfile()
+                    val photo = doc.getString("photoUrl") 
+                        ?: doc.getString("profilePicture") 
+                        ?: doc.getString("avatarUrl") 
+                        ?: profile.photoUrl
+                    
+                    profile.copy(
+                        userId = doc.id,
+                        hunterLevel = doc.getLong("hunterLevel")?.toInt() ?: profile.hunterLevel,
+                        totalXp = doc.getLong("totalXp")?.toInt() ?: profile.totalXp,
+                        hunterRank = doc.getString("hunterRank") ?: profile.hunterRank,
+                        photoUrl = photo
+                    )
+                }.filter { it.userId != currentUserId }.shuffled().take(20)
+                
+                _suggestedHunters.value = hunters
+            } catch (e: Exception) {
+                android.util.Log.e("HunterNetworkViewModel", "Failed to fetch suggestions", e)
+            }
+        }
     }
 
     private var manaListener: com.google.firebase.firestore.ListenerRegistration? = null

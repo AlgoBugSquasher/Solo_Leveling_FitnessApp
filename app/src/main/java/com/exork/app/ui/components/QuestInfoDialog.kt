@@ -55,7 +55,7 @@ fun QuestInfoDialog(
 
     LaunchedEffect(Unit) {
         animationStarted = true
-        soundManager.playSystemPopupSound()
+        soundManager.playAlert()
     }
 
     Dialog(

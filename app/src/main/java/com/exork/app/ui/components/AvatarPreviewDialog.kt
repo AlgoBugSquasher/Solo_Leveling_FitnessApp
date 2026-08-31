@@ -32,8 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import com.exork.app.ui.components.AvatarImage
 import com.exork.app.ui.theme.*
 import com.exork.app.util.SoundManager
 import java.io.File
@@ -114,34 +113,12 @@ fun AvatarPreviewDialog(
                         .background(ObsidianVoid),
                     contentAlignment = Alignment.Center
                 ) {
-                    val bitmap = remember(avatarUri, updateKey) { parseAvatarToBitmap(avatarUri) }
-                    
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Full Preview",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else if (avatarUri != null && avatarUri.startsWith("http")) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(avatarUri)
-                                .crossfade(true)
-                                .memoryCacheKey("${avatarUri}_$updateKey")
-                                .build(),
-                            contentDescription = "Full Preview",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.fillMaxSize(0.5f)
-                        )
-                    }
+                    AvatarImage(
+                        avatarData = avatarUri,
+                        updateKey = updateKey,
+                        modifier = Modifier.fillMaxSize(),
+                        placeholderSize = 120.dp
+                    )
                 }
 
                 Spacer(modifier = Modifier.weight(1.2f))

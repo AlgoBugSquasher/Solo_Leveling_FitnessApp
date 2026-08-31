@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.exork.app.BuildConfig
 import com.exork.app.R
 import com.exork.app.ui.theme.*
 import com.exork.app.util.SoundManager
@@ -116,7 +117,7 @@ fun AboutScreen(onNavigateBack: () -> Unit) {
                             )
                             
                             Text(
-                                "Version 3.1.0 - SYSTEM ACTIVE",
+                                "Version ${BuildConfig.VERSION_NAME} - SYSTEM ACTIVE",
                                 color = TitaniumGray,
                                 style = TextStyle(
                                     fontSize = 13.sp, 

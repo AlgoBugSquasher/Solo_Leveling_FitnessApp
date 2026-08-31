@@ -49,21 +49,61 @@ import coil.request.ImageRequest
 import com.exork.app.model.User
 import java.io.File
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.Base64
+import com.exork.app.ui.components.AvatarImage
 
-fun parseAvatarToBitmap(data: String?): android.graphics.Bitmap? {
+fun parseAvatarToBitmap(data: String?): Bitmap? {
     if (data.isNullOrBlank()) return null
     return try {
         if (data.startsWith("data:")) {
             val base64Data = if (data.contains(",")) data.substringAfter(",") else data
             val decodedBytes = Base64.decode(base64Data, Base64.DEFAULT)
             BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+        } else if (!data.startsWith("http")) {
+            val bitmap = BitmapFactory.decodeFile(data) ?: return null
+            val exif = ExifInterface(data)
+            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED)
+            rotateBitmap(bitmap, orientation)
         } else {
-            BitmapFactory.decodeFile(data)
+            null
         }
     } catch (e: Exception) {
         android.util.Log.e("AvatarLoader", "Failed to decode bitmap", e)
         null
+    }
+}
+
+fun rotateBitmap(bitmap: Bitmap, orientation: Int): Bitmap {
+    val matrix = Matrix()
+    when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(270f)
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
+            matrix.setRotate(180f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_TRANSPOSE -> {
+            matrix.setRotate(90f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_TRANSVERSE -> {
+            matrix.setRotate(270f)
+            matrix.postScale(-1f, 1f)
+        }
+        else -> return bitmap
+    }
+    return try {
+        val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        bitmap.recycle()
+        rotatedBitmap
+    } catch (e: OutOfMemoryError) {
+        android.util.Log.e("AvatarLoader", "OOM while rotating bitmap", e)
+        bitmap
     }
 }
 
@@ -252,35 +292,11 @@ fun ExorkProfileHeader(
                         .clickable { onAvatarClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    val avatarData = user.photoUrl ?: avatarUri
-                    val bitmap = remember(avatarData, updateKey) { parseAvatarToBitmap(avatarData) }
-                    
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = "Avatar",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else if (avatarData != null && avatarData.startsWith("http")) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(avatarData)
-                                .crossfade(true)
-                                .memoryCacheKey("${avatarData}_$updateKey")
-                                .build(),
-                            contentDescription = "Avatar",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = ChromeSilver,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
+                    AvatarImage(
+                        avatarData = user.photoUrl ?: avatarUri,
+                        updateKey = updateKey,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
 
                 // 3D Neumorphic Camera Icon Badge

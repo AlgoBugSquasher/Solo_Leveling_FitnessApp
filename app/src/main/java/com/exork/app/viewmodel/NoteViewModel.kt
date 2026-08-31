@@ -30,25 +30,33 @@ class NoteViewModel(private val repository: FitnessRepository) : ViewModel() {
                 if (error != null || snapshot == null) return@addSnapshotListener
                 
                 val remoteNotes = snapshot.documents.mapNotNull { doc ->
-                    doc.toObject(Note::class.java)
+                    try {
+                        doc.toObject(Note::class.java)
+                    } catch (e: Exception) {
+                        null
+                    }
                 }
 
                 viewModelScope.launch {
-                    val existingNotes = repository.allNotes.first()
-                    
-                    // 1. Sync remote additions/updates to local
-                    remoteNotes.forEach { remoteNote ->
-                        val localMatch = existingNotes.find { it.id == remoteNote.id }
-                        if (localMatch == null || localMatch != remoteNote) {
-                            repository.insertNoteLocal(remoteNote)
+                    try {
+                        val existingNotes = repository.allNotes.first()
+                        
+                        // 1. Sync remote additions/updates to local
+                        remoteNotes.forEach { remoteNote ->
+                            val localMatch = existingNotes.find { it.id == remoteNote.id }
+                            if (localMatch == null || localMatch != remoteNote) {
+                                repository.insertNoteLocal(remoteNote)
+                            }
                         }
-                    }
-                    
-                    // 2. Sync remote deletions to local
-                    existingNotes.forEach { localNote ->
-                        if (remoteNotes.none { it.id == localNote.id }) {
-                            repository.deleteNoteLocal(localNote)
+                        
+                        // 2. Sync remote deletions to local
+                        existingNotes.forEach { localNote ->
+                            if (remoteNotes.none { it.id == localNote.id }) {
+                                repository.deleteNoteLocal(localNote)
+                            }
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.e("NoteViewModel", "Sync loop error: ${e.message}")
                     }
                 }
             }
@@ -73,9 +81,13 @@ class NoteViewModel(private val repository: FitnessRepository) : ViewModel() {
         _searchQuery.value = query
     }
 
-    fun addNote(title: String, content: String) {
+    fun addNote(note: Note) {
         viewModelScope.launch {
-            repository.insertNote(Note(title = title, content = content))
+            try {
+                repository.insertNote(note)
+            } catch (e: Exception) {
+                android.util.Log.e("NoteViewModel", "addNote error: ${e.message}")
+            }
         }
     }
 

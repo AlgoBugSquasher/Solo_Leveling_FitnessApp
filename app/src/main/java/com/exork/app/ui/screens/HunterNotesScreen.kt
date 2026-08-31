@@ -164,7 +164,7 @@ fun HunterNotesScreen(
                 onSave = { updatedNote ->
                     if (updatedNote.title.isNotBlank() || updatedNote.content.isNotBlank()) {
                         if (isNewNote) {
-                            viewModel.addNote(updatedNote.title, updatedNote.content)
+                            viewModel.addNote(updatedNote)
                         } else {
                             viewModel.updateNote(updatedNote)
                         }
@@ -229,9 +229,7 @@ fun NoteEditorDialog(
     var content by remember { mutableStateOf(note.content) }
 
     Dialog(
-        onDismissRequest = { 
-            onSave(note.copy(title = title, content = content, timestamp = System.currentTimeMillis()))
-        },
+        onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -248,9 +246,7 @@ fun NoteEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { 
-                        onSave(note.copy(title = title, content = content, timestamp = System.currentTimeMillis()))
-                    }) {
+                    IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                     

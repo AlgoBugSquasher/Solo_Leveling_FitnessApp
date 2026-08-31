@@ -157,7 +157,7 @@ class FitnessRepository(
 
     suspend fun insertDailyQuests(quests: List<DailyQuest>) {
         dailyQuestDao.insertQuests(quests)
-        val currentUser = user.first()
+        val currentUser = userDao.getUserDirect()
         if (currentUser != null) {
             syncToFirestore(currentUser)
         }
@@ -165,7 +165,7 @@ class FitnessRepository(
 
     suspend fun updateDailyQuest(quest: DailyQuest) {
         dailyQuestDao.updateQuest(quest)
-        val currentUser = user.first()
+        val currentUser = userDao.getUserDirect()
         if (currentUser != null) {
             syncToFirestore(currentUser)
         }
@@ -308,8 +308,8 @@ class FitnessRepository(
         xpGained: Int = 0,
         isWorkout: Boolean = false,
         isQuestCompletion: Boolean = false
-    ) {
-        val currentUser = user.first() ?: return
+    ) = withContext(Dispatchers.IO) {
+        val currentUser = user.first() ?: return@withContext
         
         var effectiveXpGained = xpGained
         var updatedCustomXpToday = currentUser.customXpEarnedToday
@@ -380,7 +380,8 @@ class FitnessRepository(
             highestRank = RankCalculator.getHighestRank(currentUser.highestRank, newRank),
             lastWorkoutDate = System.currentTimeMillis(),
             customXpEarnedToday = updatedCustomXpToday,
-            lastQuestCompletedDate = if (isQuestCompletion) todayDateString else currentUser.lastQuestCompletedDate
+            lastQuestCompletedDate = if (isQuestCompletion) todayDateString else currentUser.lastQuestCompletedDate,
+            lastQuestRefreshDate = if (isQuestCompletion) System.currentTimeMillis() else currentUser.lastQuestRefreshDate
         )
 
         updateUser(updatedUser)
@@ -398,7 +399,8 @@ class FitnessRepository(
                     "hunterRank" to updatedUser.rank,
                     "currentStreak" to updatedUser.streak,
                     "lastWorkoutDate" to updatedUser.lastWorkoutDate,
-                    "lastQuestCompletedDate" to updatedUser.lastQuestCompletedDate
+                    "lastQuestCompletedDate" to updatedUser.lastQuestCompletedDate,
+                    "lastQuestRefreshDate" to updatedUser.lastQuestRefreshDate
                 )
                 
                 db.collection("users").document(firebaseUser.uid).update(updateMap).await()
@@ -467,7 +469,7 @@ class FitnessRepository(
             "currentStreak" to currentUser.streak,
             "lastSync" to System.currentTimeMillis()
         )
-        
+
         return try {
             db.collection("users").document(firebaseUser.uid)
                 .set(profile, com.google.firebase.firestore.SetOptions.merge())
@@ -525,6 +527,9 @@ class FitnessRepository(
             "currentGuildId" to user.guildId,
             "guildName" to user.guildName,
             "guildTag" to user.guildTag,
+            "deletionRequested" to user.deletionRequested,
+            "deletionRequestedAt" to user.deletionRequestedAt,
+            "scheduledDeletionAt" to user.scheduledDeletionAt,
             "dailyQuests" to questMap,
             "plannedExercises" to plannedMap,
             "lastSync" to System.currentTimeMillis()
@@ -534,6 +539,100 @@ class FitnessRepository(
             db.collection("users").document(firebaseUser.uid).set(profile, com.google.firebase.firestore.SetOptions.merge()).await()
         } catch (e: Exception) {
             android.util.Log.e("FitnessRepository", "Sync failed", e)
+        }
+    }
+
+    suspend fun scheduleAccountDeletion(): Result<Unit> = withContext(Dispatchers.IO) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser 
+        if (firebaseUser == null) {
+            android.util.Log.e("ACCOUNT_DELETE_DEBUG", "FirebaseAuth.currentUser is null")
+            return@withContext Result.failure(Exception("Not logged in"))
+        }
+
+        android.util.Log.d("ACCOUNT_DELETE_DEBUG", "Re-authentication verified. UID: ${firebaseUser.uid}")
+        
+        val db = FirebaseFirestore.getInstance()
+        
+        // Wait for local profile to ensure consistency
+        val localUser = try {
+            withTimeout(3000L) {
+                user.filterNotNull().first()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ACCOUNT_DELETE_DEBUG", "Local profile timeout")
+            return@withContext Result.failure(Exception("Synchronization timeout. Please try again."))
+        }
+
+        if (localUser.guildId != null) {
+            try {
+                val guildDoc = db.collection("guilds").document(localUser.guildId).get().await()
+                if (guildDoc.getString("masterId") == firebaseUser.uid) {
+                    android.util.Log.w("ACCOUNT_DELETE_DEBUG", "User is a Guild Master. Deletion blocked.")
+                    return@withContext Result.failure(Exception("GUILD_MASTER_ERROR"))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ACCOUNT_DELETE_DEBUG", "Guild check failed", e)
+            }
+        }
+
+        val now = System.currentTimeMillis()
+        val sevenDaysMillis = 7 * 24 * 60 * 60 * 1000L
+        val scheduledTime = now + sevenDaysMillis
+
+        val updatedUser = localUser.copy(
+            deletionRequested = true,
+            deletionRequestedAt = now,
+            scheduledDeletionAt = scheduledTime
+        )
+
+        val deletionData = mapOf(
+            "deletionRequested" to true,
+            "deletionRequestedAt" to now,
+            "scheduledDeletionAt" to scheduledTime
+        )
+
+        try {
+            android.util.Log.d("ACCOUNT_DELETE_DEBUG", "Writing deletion request to Firestore path: users/${firebaseUser.uid}")
+            
+            // Use set with merge to ensure it works even if document state is slightly different
+            db.collection("users").document(firebaseUser.uid)
+                .set(deletionData, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            
+            updateUser(updatedUser)
+            
+            android.util.Log.d("ACCOUNT_DELETE_DEBUG", "Deletion request successfully written to Firestore and Room.")
+            Result.success(Unit)
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            android.util.Log.e("ACCOUNT_DELETE_DEBUG", "Firestore Error [${e.code}]: ${e.message}")
+            Result.failure(Exception("Cloud storage error: ${e.code}. Contact support if this persists."))
+        } catch (e: Exception) {
+            android.util.Log.e("ACCOUNT_DELETE_DEBUG", "Unknown error during deletion scheduling", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun cancelAccountDeletion(): Result<Unit> = withContext(Dispatchers.IO) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return@withContext Result.failure(Exception("Not logged in"))
+        val db = FirebaseFirestore.getInstance()
+        val localUser = user.first() ?: return@withContext Result.failure(Exception("Local profile not found"))
+
+        val updatedUser = localUser.copy(
+            deletionRequested = false,
+            deletionRequestedAt = null,
+            scheduledDeletionAt = null
+        )
+
+        try {
+            db.collection("users").document(firebaseUser.uid).update(mapOf(
+                "deletionRequested" to false,
+                "deletionRequestedAt" to null,
+                "scheduledDeletionAt" to null
+            )).await()
+            updateUser(updatedUser)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -585,6 +684,33 @@ class FitnessRepository(
         } catch (e: Exception) {
             android.util.Log.e("FitnessRepository", "Avatar compression/upload failed", e)
             null
+        }
+    }
+
+    suspend fun deleteAvatar() = withContext(Dispatchers.IO) {
+        val firebaseUser = FirebaseAuth.getInstance().currentUser ?: return@withContext
+        val db = FirebaseFirestore.getInstance()
+        
+        try {
+            // 1. Clear in Firestore
+            db.collection("users").document(firebaseUser.uid)
+                .set(mapOf("photoUrl" to null), com.google.firebase.firestore.SetOptions.merge())
+                .await()
+
+            // 2. Update Local Room DB
+            val currentUser = userDao.getUserDirect()
+            if (currentUser != null) {
+                updateUser(currentUser.copy(photoUrl = null))
+                
+                // 3. Update Guild Member Photo
+                if (currentUser.guildId != null) {
+                    db.collection("guilds").document(currentUser.guildId)
+                        .collection("members").document(firebaseUser.uid)
+                        .update("photoUrl", null)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FitnessRepository", "Avatar deletion failed", e)
         }
     }
 
@@ -645,12 +771,23 @@ class FitnessRepository(
         try {
             val snapshot = db.collection("users").document(firebaseUser.uid)
                 .collection("notes").get().await()
+            
             val remoteNotes = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Note::class.java)
+                try {
+                    doc.toObject(Note::class.java)
+                } catch (e: Exception) {
+                    null
+                }
             }
+
             if (remoteNotes.isNotEmpty()) {
                 noteDao.insertNotes(remoteNotes)
             }
+            
+            // Optional: Reconcile deletions if needed
+            // val localNotes = noteDao.getAllNotes().first()
+            // localNotes.forEach { local -> if (remoteNotes.none { it.id == local.id }) noteDao.deleteNote(local) }
+            
         } catch (e: Exception) {
             android.util.Log.e("FitnessRepository", "Notes fetch failed", e)
         }

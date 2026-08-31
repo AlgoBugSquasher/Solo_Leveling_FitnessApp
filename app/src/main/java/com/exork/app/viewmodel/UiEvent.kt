@@ -21,4 +21,6 @@ sealed class UiEvent {
     data class BackupSuccess(val message: String) : UiEvent()
     data class BackupError(val message: String) : UiEvent()
     data object Logout : UiEvent()
+    data object DeletionCancelled : UiEvent()
+    data object RequestReview : UiEvent()
 }

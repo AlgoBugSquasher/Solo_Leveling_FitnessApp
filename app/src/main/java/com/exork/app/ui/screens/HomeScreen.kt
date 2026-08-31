@@ -38,10 +38,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.exork.app.model.*
 import com.exork.app.ui.components.AvatarPreviewDialog
+import com.exork.app.ui.components.ExorkSystemDialog
 import com.exork.app.ui.components.HunterRankDialog
 import com.exork.app.ui.components.NativeAvatarCropper
 import com.exork.app.ui.components.QuestInfoDialog
@@ -110,6 +109,7 @@ fun HomeScreen(
 
     var avatarUpdateKey by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showAvatarPreview by remember { mutableStateOf(false) }
+    var showRemoveAvatarConfirm by remember { mutableStateOf(false) }
     var cropUri by remember { mutableStateOf<Uri?>(null) }
 
     val context = LocalContext.current
@@ -318,8 +318,8 @@ fun HomeScreen(
                                                     ) {
                                                         Column(modifier = Modifier.weight(1f)) {
                                                             Text(
-                                                                quest.title.uppercase(), 
-                                                                style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black), 
+                                                                quest.title.uppercase(),
+                                                                style = ExorkTypography.labelLarge.copy(fontWeight = FontWeight.Black),
                                                                 color = Color.White
                                                             )
                                                             Spacer(modifier = Modifier.height(6.dp))
